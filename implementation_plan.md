@@ -47,26 +47,93 @@ Wyjścia: `[E, F, Z]` — one-hot encoding, np. E = `[1, 0, 0]`, F = `[0, 1, 0]`
 
 ## Nowy GUI — Test.java (przebudowa)
 
-Przebudować `Test.java` na aplikację Swing z następującym layoutem:
+Przebudować `Test.java` na aplikację Swing. Okno podzielone na dwie kolumny (lewy panel + prawy panel). Lewy panel podzielony horyzontalnie na dwie sekcje.
+
+### Layout okna
 
 ```
-┌──────────────────────────────────────────┐
-│  ┌────────────┐   [Zgadnij]  Wynik: E   │
-│  │            │   [Ucz]      Status:...  │
-│  │  Siatka    │   [Testuj]               │
-│  │  8 x 8     │   [Wyczyść]             │
-│  │            │                          │
-│  └────────────┘   ○ E  ○ F  ○ Z         │
-│                   [Dopisz do ciągu]      │
-└──────────────────────────────────────────┘
+┌───────────────────────────────────────┬───────────────────────────────────────┐
+│  LEWY PANEL                          │  PRAWY PANEL                          │
+│                                       │                                       │
+│  ┌─ GÓRA (rysowanie + zgadywanie) ──┐│  ┌──────────────────────────────────┐ │
+│  │                                   ││  │         Panel logów              │ │
+│  │  ┌────────────┐                   ││  │  (JTextArea + JScrollPane)       │ │
+│  │  │            │  [Zgadnij]       ││  │  auto-scroll na dół              │ │
+│  │  │  Siatka    │  [Wyczyść]       ││  └──────────────────────────────────┘ │
+│  │  │  8 x 8     │                   ││                                       │
+│  │  │            │  Wynik: E         ││  ┌─ Wyjścia sieci ─────────────────┐ │
+│  │  └────────────┘                   ││  │  ● E: 0.97   ○ F: 0.03   ○ Z: 0.01│
+│  └───────────────────────────────────┘│  └──────────────────────────────────┘ │
+│                                       │                                       │
+│  ┌─ DÓŁ (uczenie + testowanie) ─────┐│  ┌──────────────┐  ┌──────────────┐  │
+│  │                                   ││  │ Wykres MSE   │  │ Wykres acc.  │  │
+│  │  Epoki: [========■====] 1000     ││  │ (uczenie)    │  │ (testowanie) │  │
+│  │  [Ucz]          [Testuj]         ││  │ line chart   │  │ bar chart    │  │
+│  │                                   ││  └──────────────┘  └──────────────┘  │
+│  │  ○ E  ○ F  ○ Z                   ││                                       │
+│  │  [Dopisz do ciągu uczącego]      ││                                       │
+│  └───────────────────────────────────┘│                                       │
+└───────────────────────────────────────┴───────────────────────────────────────┘
 ```
 
-- **Siatka 8x8** — panel z `JPanel` gridLayout 8x8. Każda komórka to klikalna kratka (`MouseListener`), klik przełącza biały ↔ czarny. Wewnętrznie `int[8][8]` (0/1).
-- **Przycisk "Zgadnij"** — pobiera `int[64]` z siatki → `double[64]` → `siec.oblicz_wyjscie()` → sprawdza który z 3 neuronów wyjściowych > 0.5. Jeśli żaden — wyświetla "Nie rozpoznano". Jeśli więcej niż jeden — bierze najwyższy (albo też "Nie rozpoznano", do ustalenia).
-- **Przycisk "Ucz"** — wczytuje `dane_uczace.csv`, uruchamia uczenie (np. 1000 epok, lr=0.1), wyświetla postęp/status.
-- **Przycisk "Testuj"** — wczytuje `dane_testowe.csv`, wykonuje forward pass dla każdej próbki, liczy accuracy, wyświetla wynik.
-- **Przycisk "Wyczyść"** — zeruje siatkę 8x8.
+### Lewy panel — góra (rysowanie + zgadywanie)
+
+- **Siatka 8x8** — `JPanel` z `GridLayout(8,8)`. Każda komórka to klikalna kratka (`MouseListener`), klik przełącza biały (0) ↔ czarny (1). Wewnętrznie `int[8][8]`.
+- **Przycisk "Zgadnij"** — pobiera siatke jako `double[64]` → `siec.oblicz_wyjscie()` → sprawdza próg 0.5.
+- **Przycisk "Wyczyść"** — zeruje siatkę 8x8 (obok Zgadnij).
+- **Label "Wynik"** — wyświetla rozpoznaną literę lub "Nie rozpoznano".
+
+### Lewy panel — dół (uczenie + testowanie + dopisywanie)
+
+- **Slider epok** — `JSlider` zakres 100–10000, domyślnie 1000, krok 100. Obok `JLabel` z aktualną wartością (aktualizowany `ChangeListener`).
+- **Przycisk "Ucz"** — wczytuje `dane_uczace.csv`, uruchamia uczenie w `SwingWorker` (nie blokuje GUI). Po zakończeniu — `JOptionPane.showMessageDialog` z podsumowaniem (epoki, MSE końcowe, czas).
+- **Przycisk "Testuj"** — wczytuje `dane_testowe.csv`, forward pass, liczy accuracy per klasa. Po zakończeniu — `JOptionPane.showMessageDialog` z wynikiem (E=X%, F=X%, Z=X%, TOTAL=X%).
 - **Radio buttony E/F/Z + "Dopisz"** — pobiera siatkę + wybraną literę → dopisuje wiersz do `dane_uczace.csv`.
+
+### Prawy panel — panel logów
+
+- `JTextArea` (nieedytowalny) w `JScrollPane`, auto-scroll na dół.
+- Metoda `log(String msg)` dopisuje linię z timestampem `[HH:mm:ss]`.
+- Przykładowe wpisy:
+  - `[12:34:56] Start uczenia, epoki=1000, lr=0.1`
+  - `[12:34:56] Epoka 100/1000, MSE=0.0342`
+  - `[12:34:57] Koniec uczenia, MSE końcowe=0.0012`
+  - `[12:34:58] Test: E=100%, F=80%, Z=100%, TOTAL=93%`
+  - `[12:34:59] Zgadywanie: [0.98, 0.01, 0.03] -> E`
+
+### Prawy panel — wyjścia neuronów
+
+Kompaktowy panel pokazujący wartości 3 neuronów wyjściowych po kliknięciu "Zgadnij":
+
+```
+● E: 0.97    ○ F: 0.03    ○ Z: 0.01
+```
+
+- Kropka zwycięzcy — zielona wypełniona (`fillOval`) przy neuronie z najwyższą wartością > 0.5.
+- Reszta — szare puste kółka (`drawOval`).
+- Jeśli żaden > 0.5 — wszystkie kropki czerwone (nie rozpoznano).
+- Implementacja: `JPanel` z `paintComponent` — trzy `fillOval`/`drawOval` + `drawString` dla etykiet i wartości.
+
+### Prawy panel — wykres uczenia (MSE per epoka)
+
+- **Line chart** — średni MSE po każdej epoce, krzywa opadająca = sieć się uczy.
+- Klasa `WykresPanel extends JPanel` z `ArrayList<Double>`.
+- `paintComponent`: osie (`drawLine`), etykiety (`drawString`), punkty łączone linią łamaną.
+- MSE obliczane: `Σ(oczekiwane - wyjście)² / (liczbaPróbek * liczbaWyjść)`.
+- Wymaga zmiany sygnatury `uczEpoka()` na zwracającą `double` (MSE).
+- Aktualizacja co N epok + `repaint()`.
+
+### Prawy panel — wykres testowania (accuracy per klasa)
+
+- **Bar chart** — 4 słupki: E, F, Z, TOTAL (% poprawnych klasyfikacji).
+- Ten sam wzorzec `WykresPanel`, ale rysuje `fillRect` + etykiety + wartości procentowe.
+- Aktualizacja po kliknięciu "Testuj".
+
+### Uczenie w osobnym wątku
+
+- `SwingWorker` — pętla po epokach w `doInBackground()`, aktualizacja logów i wykresu przez `publish()`/`process()`.
+- Przycisk "Ucz" wyłączany na czas uczenia, włączany po zakończeniu.
+- Po zakończeniu — `JOptionPane` z podsumowaniem.
 
 ## Format CSV
 
