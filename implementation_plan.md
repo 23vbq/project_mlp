@@ -16,7 +16,7 @@ Wyjścia: `[E, F, Z]` — one-hot encoding, np. E = `[1, 0, 0]`, F = `[0, 1, 0]`
 
 ### 1. Neuron.java
 
-- Przełączyć inicjalizację wag na zakres `*0.01` (jak przygotował profesor w komentarzu "do projektu") — zakomentować linię `*10`, odkomentować linię `*0.01`.
+- Przełączyć inicjalizację wag na zakres `*0.01` (jak przygotował profesor w komentarzu "do projektu") — zakomentować linię `*10`, odkomentować linię `*0.01`. Dodać klamry `{}` do pętli `for` w `generuj()` dla czytelności.
 - Dodać pole `double wyjscie` — przechowuje ostatni wynik (potrzebne do obliczenia pochodnej sigmoidy przy backprop).
 - Zmodyfikować `oblicz_wyjscie()` tak, by zapisywało wynik do `this.wyjscie` przed `return`.
 - Dodać pole `double delta` — błąd neuronu podczas backpropagation.
@@ -28,8 +28,7 @@ Wyjścia: `[E, F, Z]` — one-hot encoding, np. E = `[1, 0, 0]`, F = `[0, 1, 0]`
 
 ### 3. Siec.java
 
-- Dodać pole `double[] pierwszeWejscia` — zapamiętuje oryginalne wejścia sieci.
-- Zmodyfikować `oblicz_wyjscie()` aby zapisywało `pierwszeWejscia`.
+- Pole `pierwszeWejscia` **nie jest potrzebne** — każda `Warstwa` przechowuje swoje `ostatnieWejscia`, więc `warstwy[0].ostatnieWejscia` to oryginalne wejścia sieci.
 - Dodać metodę `double ucz(double[] wejscia, double[] oczekiwane, double lr)` implementującą **backpropagation** (zwraca MSE próbki):
   1. **Forward pass** — `oblicz_wyjscie(wejscia)`
   2. **Oblicz delty warstwy wyjściowej** — dla każdego neuronu `i` w ostatniej warstwie:
@@ -79,7 +78,7 @@ Przebudować `Test.java` na aplikację Swing. Okno podzielone na dwie kolumny (l
 
 ### Lewy panel — góra (rysowanie + zgadywanie)
 
-- **Siatka 8x8** — `JPanel` z `GridLayout(8,8)`. Każda komórka to klikalna kratka (`MouseListener`), klik przełącza biały (0) ↔ czarny (1). Wewnętrznie `int[8][8]`.
+- **Siatka 8x8** — `JPanel` z `GridLayout(8,8)`. Każda komórka to klikalna kratka (`MouseListener`), klik przełącza biały (0) ↔ czarny (1). Wewnętrznie `int[8][8]`. Kolejność odczytu do `double[64]`: **row-major** (wiersz po wierszu, `index = row*8 + col`) — taka sama w GUI i CSV.
 - **Przycisk "Zgadnij"** — pobiera siatke jako `double[64]` → `siec.oblicz_wyjscie()` → sprawdza próg 0.5.
 - **Przycisk "Wyczyść"** — zeruje siatkę 8x8 (obok Zgadnij).
 - **Label "Wynik"** — wyświetla rozpoznaną literę lub "Nie rozpoznano".
@@ -88,7 +87,7 @@ Przebudować `Test.java` na aplikację Swing. Okno podzielone na dwie kolumny (l
 
 - **Slider epok** — `JSlider` zakres 100–10000, domyślnie 1000, krok 100. Obok `JLabel` z aktualną wartością (aktualizowany `ChangeListener`).
 - **Slider learning rate** — `JSlider` zakres 1–100 (mapowany na 0.01–1.0), domyślnie 10 (= 0.1). Obok `JLabel` z aktualną wartością. Pozwala eksperymentować z prędkością uczenia.
-- **Przycisk "Ucz"** — wczytuje `dane_uczace.csv`, uruchamia uczenie w `SwingWorker` (nie blokuje GUI). Po zakończeniu — `JOptionPane.showMessageDialog` z podsumowaniem (epoki, lr, MSE końcowe, czas).
+- **Przycisk "Ucz"** — wczytuje `dane_uczace.csv`, uruchamia uczenie w `SwingWorker` (nie blokuje GUI). **Wielokrotne kliknięcie kontynuuje uczenie** istniejącej sieci (dokłada epoki, wykres MSE dopisuje punkty). Reset sieci = osobny przycisk. Po zakończeniu — `JOptionPane.showMessageDialog` z podsumowaniem (epoki, lr, MSE końcowe, czas).
 - **Przycisk "Testuj"** — wczytuje `dane_testowe.csv`, forward pass, liczy accuracy per klasa. Po zakończeniu — `JOptionPane.showMessageDialog` z wynikiem (E=X%, F=X%, Z=X%, TOTAL=X%).
 - **Przycisk "Reset sieć"** — tworzy nową instancję `Siec` z losowymi wagami (ta sama topologia 64→8→5→3). Czyści wykresy i logi. Pozwala zacząć uczenie od zera bez restartu aplikacji.
 - **Radio buttony E/F/Z + "Dopisz"** — pobiera siatkę + wybraną literę → dopisuje wiersz do `dane_uczace.csv`.
