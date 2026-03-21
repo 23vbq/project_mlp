@@ -16,7 +16,7 @@ Wyjścia: `[E, F, Z]` — one-hot encoding, np. E = `[1, 0, 0]`, F = `[0, 1, 0]`
 
 ### 1. Neuron.java
 
-- Przełączyć inicjalizację wag na mały zakres (`*0.01` zamiast `*10`) — odkomentować linię 21, zakomentować linię 20.
+- Przełączyć inicjalizację wag na zakres `*0.01` (jak przygotował profesor w komentarzu "do projektu") — zakomentować linię `*10`, odkomentować linię `*0.01`.
 - Dodać pole `double wyjscie` — przechowuje ostatni wynik (potrzebne do obliczenia pochodnej sigmoidy przy backprop).
 - Zmodyfikować `oblicz_wyjscie()` tak, by zapisywało wynik do `this.wyjscie` przed `return`.
 - Dodać pole `double delta` — błąd neuronu podczas backpropagation.
@@ -30,7 +30,7 @@ Wyjścia: `[E, F, Z]` — one-hot encoding, np. E = `[1, 0, 0]`, F = `[0, 1, 0]`
 
 - Dodać pole `double[] pierwszeWejscia` — zapamiętuje oryginalne wejścia sieci.
 - Zmodyfikować `oblicz_wyjscie()` aby zapisywało `pierwszeWejscia`.
-- Dodać metodę `void ucz(double[] wejscia, double[] oczekiwane, double lr)` implementującą **backpropagation**:
+- Dodać metodę `double ucz(double[] wejscia, double[] oczekiwane, double lr)` implementującą **backpropagation** (zwraca MSE próbki):
   1. **Forward pass** — `oblicz_wyjscie(wejscia)`
   2. **Oblicz delty warstwy wyjściowej** — dla każdego neuronu `i` w ostatniej warstwie:
      ```java
@@ -43,7 +43,7 @@ Wyjścia: `[E, F, Z]` — one-hot encoding, np. E = `[1, 0, 0]`, F = `[0, 1, 0]`
      wagi[0] += lr * delta;              // bias
      wagi[i] += lr * delta * wejscie[i-1]; // reszta wag
      ```
-- Dodać metodę `void uczEpoka(double[][] dane, double[][] oczekiwane, double lr)` — iteruje po wszystkich próbkach.
+- Dodać metodę `double uczEpoka(double[][] dane, double[][] oczekiwane, double lr)` — iteruje po wszystkich próbkach, mieszając kolejność przed każdą epoką (`shuffle`). Zwraca średnie MSE epoki (potrzebne do wykresu).
 
 ## Nowy GUI — Test.java (przebudowa)
 
@@ -68,8 +68,9 @@ Przebudować `Test.java` na aplikację Swing. Okno podzielone na dwie kolumny (l
 │  ┌─ DÓŁ (uczenie + testowanie) ─────┐│  ┌──────────────┐  ┌──────────────┐  │
 │  │                                   ││  │ Wykres MSE   │  │ Wykres acc.  │  │
 │  │  Epoki: [========■====] 1000     ││  │ (uczenie)    │  │ (testowanie) │  │
-│  │  [Ucz]          [Testuj]         ││  │ line chart   │  │ bar chart    │  │
-│  │                                   ││  └──────────────┘  └──────────────┘  │
+│  │  LR:    [==■==========] 0.10     ││  │ line chart   │  │ bar chart    │  │
+│  │  [Ucz]  [Testuj]  [Reset sieć]  ││  └──────────────┘  └──────────────┘  │
+│  │                                   ││                                       │
 │  │  ○ E  ○ F  ○ Z                   ││                                       │
 │  │  [Dopisz do ciągu uczącego]      ││                                       │
 │  └───────────────────────────────────┘│                                       │
@@ -86,8 +87,10 @@ Przebudować `Test.java` na aplikację Swing. Okno podzielone na dwie kolumny (l
 ### Lewy panel — dół (uczenie + testowanie + dopisywanie)
 
 - **Slider epok** — `JSlider` zakres 100–10000, domyślnie 1000, krok 100. Obok `JLabel` z aktualną wartością (aktualizowany `ChangeListener`).
-- **Przycisk "Ucz"** — wczytuje `dane_uczace.csv`, uruchamia uczenie w `SwingWorker` (nie blokuje GUI). Po zakończeniu — `JOptionPane.showMessageDialog` z podsumowaniem (epoki, MSE końcowe, czas).
+- **Slider learning rate** — `JSlider` zakres 1–100 (mapowany na 0.01–1.0), domyślnie 10 (= 0.1). Obok `JLabel` z aktualną wartością. Pozwala eksperymentować z prędkością uczenia.
+- **Przycisk "Ucz"** — wczytuje `dane_uczace.csv`, uruchamia uczenie w `SwingWorker` (nie blokuje GUI). Po zakończeniu — `JOptionPane.showMessageDialog` z podsumowaniem (epoki, lr, MSE końcowe, czas).
 - **Przycisk "Testuj"** — wczytuje `dane_testowe.csv`, forward pass, liczy accuracy per klasa. Po zakończeniu — `JOptionPane.showMessageDialog` z wynikiem (E=X%, F=X%, Z=X%, TOTAL=X%).
+- **Przycisk "Reset sieć"** — tworzy nową instancję `Siec` z losowymi wagami (ta sama topologia 64→8→5→3). Czyści wykresy i logi. Pozwala zacząć uczenie od zera bez restartu aplikacji.
 - **Radio buttony E/F/Z + "Dopisz"** — pobiera siatkę + wybraną literę → dopisuje wiersz do `dane_uczace.csv`.
 
 ### Prawy panel — panel logów
@@ -132,8 +135,14 @@ Kompaktowy panel pokazujący wartości 3 neuronów wyjściowych po kliknięciu "
 ### Uczenie w osobnym wątku
 
 - `SwingWorker` — pętla po epokach w `doInBackground()`, aktualizacja logów i wykresu przez `publish()`/`process()`.
-- Przycisk "Ucz" wyłączany na czas uczenia, włączany po zakończeniu.
-- Po zakończeniu — `JOptionPane` z podsumowaniem.
+- **Blokada przycisków** — na czas uczenia wyłączane (`setEnabled(false)`) są: Ucz, Testuj, Zgadnij, Dopisz, Reset. Wagi w trakcie uczenia są niestabilne, więc forward pass dałby niespójne wyniki.
+- Po zakończeniu — przyciski odblokowane + `JOptionPane` z podsumowaniem.
+
+### Obsługa błędów CSV
+
+- Przy wczytywaniu `dane_uczace.csv` / `dane_testowe.csv` — `try/catch` na `FileNotFoundException` i `IOException`.
+- W razie braku pliku: `JOptionPane.showMessageDialog` z komunikatem błędu (np. "Nie znaleziono pliku dane_uczace.csv") + log w panelu logów.
+- Walidacja: sprawdzenie czy wiersz ma dokładnie 65 kolumn (64 piksele + etykieta) i czy etykieta to E/F/Z.
 
 ## Format CSV
 
