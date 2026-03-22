@@ -80,10 +80,6 @@ Suma w kroku propagacji: po wszystkich `k` w warstwie `l+1`: `Σ_k delta_k * neu
 - Nie mieszać osobno tablic `dane` i `oczekiwane` niezależnie (rozjadą się pary).
 - **Poprawnie:** utworzyć listę indeksów `0..N-1`, wykonać `Collections.shuffle` na tej liście, następnie iterować próbki w kolejności `indeksy[i]` — tak samo dla `dane` i `oczekiwane`.
 
-### Wczesne zatrzymanie *(opcjonalne, non-MVP)*
-
-Można dodać prostą flagę `stopped` w `SwingWorker` i przycisk „Stop" do przerwania uczenia w dowolnym momencie — bez dodatkowych kryteriów stopu. Więcej mechanizmów (plateau MSE, limit czasu) wykracza poza zakres projektu.
-
 ## GUI — Main.java (rozbudowa istniejącego szkieletu)
 
 Rozbudować `Main.java` (nie `Test.java` — ten zostawiamy). Okno podzielone na dwie kolumny (lewy panel + prawy panel). Lewy panel podzielony horyzontalnie na dwie sekcje.
