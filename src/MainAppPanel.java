@@ -1,6 +1,7 @@
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.GridLayout;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -48,32 +49,28 @@ public class MainAppPanel extends JPanel {
 		JScrollPane logScroll = new JScrollPane(logArea);
 		logScroll.setBorder(BorderFactory.createTitledBorder("Log"));
 
-		epochsSlider = new JSlider(100, 10_000, 1_000);
-		epochsSlider.setMajorTickSpacing(1000);
+		epochsSlider = new JSlider(JSlider.HORIZONTAL, 100, 10_000, 1_000);
+		epochsSlider.setMajorTickSpacing(2_000);
 		epochsSlider.setMinorTickSpacing(100);
 		epochsSlider.setPaintTicks(true);
-		epochsValueLabel = new JLabel(String.valueOf(epochsSlider.getValue()));
-		epochsSlider.addChangeListener(new ChangeListener() {
-			@Override
-			public void stateChanged(ChangeEvent e) {
-				if (!epochsSlider.getValueIsAdjusting()) {
-					epochsValueLabel.setText(String.valueOf(epochsSlider.getValue()));
-				}
-			}
-		});
+		epochsSlider.setPaintLabels(true);
+		epochsSlider.setSnapToTicks(true);
+		// Standardowe etykiety liczbowe co 2000 od minimum (bez własnego Hashtable)
+		epochsSlider.setLabelTable(epochsSlider.createStandardLabels(2_000));
+		styleSliderFont(epochsSlider);
+		epochsValueLabel = boldValueLabel(String.valueOf(epochsSlider.getValue()));
+		epochsSlider.addChangeListener(e -> epochsValueLabel.setText(String.valueOf(epochsSlider.getValue())));
 
-		learningRateSlider = new JSlider(1, 100, 10);
+		learningRateSlider = new JSlider(JSlider.HORIZONTAL, 1, 100, 10);
 		learningRateSlider.setMajorTickSpacing(25);
+		learningRateSlider.setMinorTickSpacing(5);
 		learningRateSlider.setPaintTicks(true);
-		learningRateValueLabel = new JLabel(formatLearningRate(learningRateSlider.getValue()));
-		learningRateSlider.addChangeListener(new ChangeListener() {
-			@Override
-			public void stateChanged(ChangeEvent e) {
-				if (!learningRateSlider.getValueIsAdjusting()) {
-					learningRateValueLabel.setText(formatLearningRate(learningRateSlider.getValue()));
-				}
-			}
-		});
+		// Pod suwakiem surowe 1–100 mało czytelne; faktyczny LR (0.01–1.00) tylko w etykiecie obok
+		learningRateSlider.setPaintLabels(false);
+		styleSliderFont(learningRateSlider);
+		learningRateValueLabel = boldValueLabel(formatLearningRate(learningRateSlider.getValue()));
+		learningRateSlider.addChangeListener(
+				e -> learningRateValueLabel.setText(formatLearningRate(learningRateSlider.getValue())));
 
 		radioE = new JRadioButton("E", true);
 		radioF = new JRadioButton("F");
@@ -114,11 +111,12 @@ public class MainAppPanel extends JPanel {
 		leftSplit.setResizeWeight(0.55);
 		leftSplit.setOneTouchExpandable(true);
 
-		JSplitPane mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftSplit, rightColumn);
-		mainSplit.setResizeWeight(0.48);
-		mainSplit.setOneTouchExpandable(true);
+		// Stałe 50/50 lewo/prawo — bez przeciągania (GridLayout zamiast JSplitPane poziomego)
+		JPanel mainColumns = new JPanel(new GridLayout(1, 2, 12, 0));
+		mainColumns.add(leftSplit);
+		mainColumns.add(rightColumn);
 
-		add(mainSplit, BorderLayout.CENTER);
+		add(mainColumns, BorderLayout.CENTER);
 
 		log("UI załadowane. Handlery w trybie stub (tylko log).");
 	}
@@ -152,15 +150,28 @@ public class MainAppPanel extends JPanel {
 		p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
 		p.setBorder(BorderFactory.createTitledBorder("Uczenie i dane"));
 
-		JPanel epochRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-		epochRow.add(new JLabel("Epoki:"));
-		epochRow.add(epochsSlider);
-		epochRow.add(epochsValueLabel);
+		epochsSlider.setPreferredSize(new Dimension(320, 64));
+		learningRateSlider.setPreferredSize(new Dimension(320, 64));
 
-		JPanel lrRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-		lrRow.add(new JLabel("LR:"));
-		lrRow.add(learningRateSlider);
-		lrRow.add(learningRateValueLabel);
+		JPanel epochRow = new JPanel(new BorderLayout(8, 4));
+		epochRow.setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 0));
+		JLabel epL = new JLabel("Liczba epok");
+		epL.setFont(epL.getFont().deriveFont(Font.PLAIN));
+		epochRow.add(epL, BorderLayout.NORTH);
+		JPanel epochSouth = new JPanel(new BorderLayout(8, 0));
+		epochSouth.add(epochsSlider, BorderLayout.CENTER);
+		epochSouth.add(epochsValueLabel, BorderLayout.EAST);
+		epochRow.add(epochSouth, BorderLayout.CENTER);
+
+		JPanel lrRow = new JPanel(new BorderLayout(8, 4));
+		lrRow.setBorder(BorderFactory.createEmptyBorder(4, 0, 8, 0));
+		JLabel lrL = new JLabel("Learning rate");
+		lrL.setFont(lrL.getFont().deriveFont(Font.PLAIN));
+		lrRow.add(lrL, BorderLayout.NORTH);
+		JPanel lrSouth = new JPanel(new BorderLayout(8, 0));
+		lrSouth.add(learningRateSlider, BorderLayout.CENTER);
+		lrSouth.add(learningRateValueLabel, BorderLayout.EAST);
+		lrRow.add(lrSouth, BorderLayout.CENTER);
 
 		JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT));
 		JButton trainBtn = new JButton("Ucz");
@@ -191,6 +202,25 @@ public class MainAppPanel extends JPanel {
 		p.add(appendRow);
 
 		return p;
+	}
+
+	private static JLabel boldValueLabel(String text) {
+		JLabel l = new JLabel(text);
+		l.setFont(l.getFont().deriveFont(Font.BOLD, l.getFont().getSize() + 1f));
+		l.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 0));
+		return l;
+	}
+
+	private static void styleSliderFont(JSlider s) {
+		Font f = s.getFont().deriveFont(Font.PLAIN, Math.max(11f, s.getFont().getSize2D() - 0.5f));
+		s.setFont(f);
+		if (s.getLabelTable() != null) {
+			s.getLabelTable().values().forEach(l -> {
+				if (l instanceof JLabel) {
+					((JLabel) l).setFont(f);
+				}
+			});
+		}
 	}
 
 	private static String formatLearningRate(int sliderValue) {
