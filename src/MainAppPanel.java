@@ -29,7 +29,7 @@ public class MainAppPanel extends JPanel {
 
 	private final JPanel trainingChartPlaceholder;
 	private final JPanel testChartPlaceholder;
-	private final JPanel outputNeuronsPlaceholder;
+	private final NetworkOutputsPanel networkOutputsPanel;
 
 	public MainAppPanel(Siec network) {
 		super(new BorderLayout(8, 8));
