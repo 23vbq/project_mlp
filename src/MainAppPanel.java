@@ -3,10 +3,7 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
 import java.awt.GridLayout;
-import java.awt.Insets;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
@@ -84,10 +81,7 @@ public class MainAppPanel extends JPanel {
 		letterGroup.add(radioF);
 		letterGroup.add(radioZ);
 
-		outputNeuronsPlaceholder = new JPanel();
-		outputNeuronsPlaceholder.setBorder(BorderFactory.createTitledBorder("Wyjścia sieci"));
-		outputNeuronsPlaceholder.setPreferredSize(new Dimension(200, 72));
-		outputNeuronsPlaceholder.add(new JLabel("—"));
+		networkOutputsPanel = new NetworkOutputsPanel();
 
 		trainingChartPlaceholder = new JPanel(new BorderLayout());
 		trainingChartPlaceholder.setBorder(BorderFactory.createTitledBorder("Wykres MSE (uczenie)"));
@@ -105,7 +99,7 @@ public class MainAppPanel extends JPanel {
 
 		JPanel rightColumn = new JPanel(new BorderLayout(0, 8));
 		rightColumn.add(logScroll, BorderLayout.NORTH);
-		rightColumn.add(outputNeuronsPlaceholder, BorderLayout.CENTER);
+		rightColumn.add(networkOutputsPanel, BorderLayout.CENTER);
 		rightColumn.add(chartsRow, BorderLayout.SOUTH);
 
 		JPanel leftTop = buildLeftTopPanel();
@@ -115,19 +109,18 @@ public class MainAppPanel extends JPanel {
 		leftSplit.setResizeWeight(0.55);
 		leftSplit.setOneTouchExpandable(true);
 
-		// Stałe 50/50 lewo/prawo — bez poziomego JSplitPane (nie da się zmieniać szerokości kolumn)
-		JPanel mainColumns = new JPanel(new GridBagLayout());
-		GridBagConstraints gbc = new GridBagConstraints();
-		gbc.fill = GridBagConstraints.BOTH;
-		gbc.weighty = 1.0;
-		gbc.weightx = 0.5;
-		gbc.gridx = 0;
-		gbc.gridy = 0;
-		gbc.insets = new Insets(0, 0, 0, 6);
-		mainColumns.add(leftSplit, gbc);
-		gbc.gridx = 1;
-		gbc.insets = new Insets(0, 6, 0, 0);
-		mainColumns.add(rightColumn, gbc);
+		JPanel leftWrapper = new JPanel(new BorderLayout());
+		leftWrapper.setBorder(BorderFactory.createTitledBorder("Siatka i uczenie"));
+		leftWrapper.add(leftSplit, BorderLayout.CENTER);
+
+		JPanel rightWrapper = new JPanel(new BorderLayout());
+		rightWrapper.setBorder(BorderFactory.createTitledBorder("Log, wyjścia i wykresy"));
+		rightWrapper.add(rightColumn, BorderLayout.CENTER);
+
+		// GridLayout: dwie kolumny zawsze dokładnie po 50% — brak uchwytu do skalowania lewo/prawo
+		JPanel mainColumns = new JPanel(new GridLayout(1, 2, 12, 0));
+		mainColumns.add(leftWrapper);
+		mainColumns.add(rightWrapper);
 
 		add(mainColumns, BorderLayout.CENTER);
 
@@ -256,10 +249,16 @@ public class MainAppPanel extends JPanel {
 
 	private void onGuess() {
 		log("[Zgadnij] stub — sieć: " + (mlpNetwork != null ? "ok" : "null"));
+		// Tymczasowy podgląd UI wyjść (bez prawdziwej inferencji)
+		networkOutputsPanel.setReadout(0.62, 0.21, 0.19,
+				NetworkOutputsPanel.DotMode.WINNER,
+				NetworkOutputsPanel.DotMode.OTHER,
+				NetworkOutputsPanel.DotMode.OTHER);
 	}
 
 	private void onClear() {
 		paintCanvas.clear();
+		networkOutputsPanel.setIdle();
 		log("[Wyczyść] siatka wyczyszczona.");
 	}
 
@@ -275,6 +274,7 @@ public class MainAppPanel extends JPanel {
 		int[] layers = { 8, 5, 3 };
 		mlpNetwork = new Siec(64, 3, layers);
 		logArea.setText("");
+		networkOutputsPanel.setIdle();
 		log("[Reset sieć] nowa Siec(64→8→5→3), log wyczyszczony (stub wykresów bez zmian).");
 	}
 

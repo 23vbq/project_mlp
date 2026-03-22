@@ -24,7 +24,18 @@ public class ModernRectSliderUI extends BasicSliderUI {
 
 	@Override
 	protected Dimension getThumbSize() {
-		return new Dimension(12, 20);
+		return new Dimension(14, 22);
+	}
+
+	@Override
+	protected void calculateTrackRect() {
+		super.calculateTrackRect();
+		if (slider.getOrientation() != JSlider.HORIZONTAL) {
+			return;
+		}
+		int h = 12;
+		int mid = trackRect.y + Math.max(trackRect.height, 1) / 2;
+		trackRect.setBounds(trackRect.x, mid - h / 2, trackRect.width, h);
 	}
 
 	@Override
