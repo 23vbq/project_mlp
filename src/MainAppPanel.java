@@ -1,8 +1,12 @@
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
@@ -49,14 +53,14 @@ public class MainAppPanel extends JPanel {
 		JScrollPane logScroll = new JScrollPane(logArea);
 		logScroll.setBorder(BorderFactory.createTitledBorder("Log"));
 
-		epochsSlider = new JSlider(JSlider.HORIZONTAL, 100, 10_000, 1_000);
-		epochsSlider.setMajorTickSpacing(2_000);
+		epochsSlider = new JSlider(JSlider.HORIZONTAL, 100, 10000, 1000);
+		epochsSlider.setMajorTickSpacing(2000);
 		epochsSlider.setMinorTickSpacing(100);
 		epochsSlider.setPaintTicks(true);
 		epochsSlider.setPaintLabels(true);
 		epochsSlider.setSnapToTicks(true);
-		// Standardowe etykiety liczbowe co 2000 od minimum (bez własnego Hashtable)
-		epochsSlider.setLabelTable(epochsSlider.createStandardLabels(2_000));
+		epochsSlider.setLabelTable(epochsSlider.createStandardLabels(2000));
+		epochsSlider.setUI(new ModernRectSliderUI(epochsSlider, new Color(0, 114, 178)));
 		styleSliderFont(epochsSlider);
 		epochsValueLabel = boldValueLabel(String.valueOf(epochsSlider.getValue()));
 		epochsSlider.addChangeListener(e -> epochsValueLabel.setText(String.valueOf(epochsSlider.getValue())));
@@ -65,8 +69,8 @@ public class MainAppPanel extends JPanel {
 		learningRateSlider.setMajorTickSpacing(25);
 		learningRateSlider.setMinorTickSpacing(5);
 		learningRateSlider.setPaintTicks(true);
-		// Pod suwakiem surowe 1–100 mało czytelne; faktyczny LR (0.01–1.00) tylko w etykiecie obok
 		learningRateSlider.setPaintLabels(false);
+		learningRateSlider.setUI(new ModernRectSliderUI(learningRateSlider, new Color(34, 139, 34)));
 		styleSliderFont(learningRateSlider);
 		learningRateValueLabel = boldValueLabel(formatLearningRate(learningRateSlider.getValue()));
 		learningRateSlider.addChangeListener(
@@ -111,10 +115,19 @@ public class MainAppPanel extends JPanel {
 		leftSplit.setResizeWeight(0.55);
 		leftSplit.setOneTouchExpandable(true);
 
-		// Stałe 50/50 lewo/prawo — bez przeciągania (GridLayout zamiast JSplitPane poziomego)
-		JPanel mainColumns = new JPanel(new GridLayout(1, 2, 12, 0));
-		mainColumns.add(leftSplit);
-		mainColumns.add(rightColumn);
+		// Stałe 50/50 lewo/prawo — bez poziomego JSplitPane (nie da się zmieniać szerokości kolumn)
+		JPanel mainColumns = new JPanel(new GridBagLayout());
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.fill = GridBagConstraints.BOTH;
+		gbc.weighty = 1.0;
+		gbc.weightx = 0.5;
+		gbc.gridx = 0;
+		gbc.gridy = 0;
+		gbc.insets = new Insets(0, 0, 0, 6);
+		mainColumns.add(leftSplit, gbc);
+		gbc.gridx = 1;
+		gbc.insets = new Insets(0, 6, 0, 0);
+		mainColumns.add(rightColumn, gbc);
 
 		add(mainColumns, BorderLayout.CENTER);
 
@@ -150,8 +163,8 @@ public class MainAppPanel extends JPanel {
 		p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
 		p.setBorder(BorderFactory.createTitledBorder("Uczenie i dane"));
 
-		epochsSlider.setPreferredSize(new Dimension(320, 64));
-		learningRateSlider.setPreferredSize(new Dimension(320, 64));
+		epochsSlider.setPreferredSize(new Dimension(320, 72));
+		learningRateSlider.setPreferredSize(new Dimension(320, 56));
 
 		JPanel epochRow = new JPanel(new BorderLayout(8, 4));
 		epochRow.setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 0));
