@@ -48,9 +48,42 @@ Wyjścia: `[E, F, Z]` — one-hot encoding, np. E = `[1, 0, 0]`, F = `[0, 1, 0]`
      ```
 - Dodać metodę `double uczEpoka(double[][] dane, double[][] oczekiwane, double lr)` — iteruje po wszystkich próbkach, mieszając kolejność przed każdą epoką (`shuffle`). Zwraca średnie MSE epoki (potrzebne do wykresu).
 
+### Definicja MSE (spójność `ucz` / `uczEpoka` / wykres)
+
+- **MSE jednej próbki** (wartość zwracana przez `ucz()`): średnia kwadratu błędu po **3 wyjściach**:
+  - `mseProbka = (1/3) * Σ_{k=0}^{2} (oczekiwane[k] - wyjscie[k])²`
+- **MSE epoki** (wartość zwracana przez `uczEpoka()`): średnia MSE po **wszystkich próbkach** w epoce:
+  - `mseEpoka = (1/N) * Σ_{n=0}^{N-1} mseProbka(n)`
+- Ten sam wzór używany przy logowaniu i na wykresie MSE — bez mieszania sumy ze średnią.
+
+### Indeksacja wag przy propagacji wstecznej
+
+W `Neuron`: `wagi[0]` = bias, `wagi[1..liczba_wejsc]` odpowiadają wejściom `wejscia[0]..wejscia[liczba_wejsc-1]` (czyli wyjściom poprzedniej warstwy).
+
+Przy obliczaniu delty neuronu `j` w warstwie `l` (indeks w tej warstwie) od neuronów warstwy `l+1` (indeks `k`):
+
+- Waga z wyjścia `j` warstwy `l` do neuronu `k` warstwy `l+1` to **`neuron_k.wagi[j + 1]`** (bo `j+1` to indeks w tablicy wag odpowiadający `j`-temu wejściu).
+
+Suma w kroku propagacji: po wszystkich `k` w warstwie `l+1`: `Σ_k delta_k * neuron_k.wagi[j + 1]`.
+
+### Kolejność kroków w `ucz()`
+
+1. Forward pass (zapis `ostatnieWejscia` w warstwach, `wyjscie` w neuronach).
+2. Obliczyć **wszystkie** delty od warstwy wyjściowej w dół do pierwszej.
+3. Dopiero potem **zaktualizować wszystkie wagi** (żeby delty wyższych warstw liczyły się na starych wagach).
+
+### Shuffle przed epoką
+
+- Nie mieszać osobno tablic `dane` i `oczekiwane` niezależnie (rozjadą się pary).
+- **Poprawnie:** utworzyć listę indeksów `0..N-1`, wykonać `Collections.shuffle` na tej liście, następnie iterować próbki w kolejności `indeksy[i]` — tak samo dla `dane` i `oczekiwane`.
+
 ## GUI — Main.java (rozbudowa istniejącego szkieletu)
 
 Rozbudować `Main.java` (nie `Test.java` — ten zostawiamy). Okno podzielone na dwie kolumny (lewy panel + prawy panel). Lewy panel podzielony horyzontalnie na dwie sekcje.
+
+**Pole sieci:** w kodzie może nazywać się np. `mlpNetwork` (jak w szkielecie) — w planie oznacza instancję `Siec`.
+
+**Layout (Swing):** prosty wariant — główne okno `BorderLayout` lub `JSplitPane` (lewo/prawo); lewa kolumna `JSplitPane` pionowy (góra: rysowanie, dół: sterowanie) albo dwa panele w `BorderLayout.NORTH` / `SOUTH`; prawa kolumna `BorderLayout` (logi `NORTH`, wyjścia neuronów `CENTER`, dół: dwa `JPanel` obok siebie w kontenerze z `GridLayout(1,2)` lub zagnieżdżony `JSplitPane`). Celem jest czytelny podział bez `GridBagLayout`, chyba że będzie potrzebny.
 
 ### Layout okna
 
@@ -84,7 +117,7 @@ Rozbudować `Main.java` (nie `Test.java` — ten zostawiamy). Okno podzielone na
 
 - **Siatka 8x8** — użyć istniejącego `PaintCanvasComponent(8)`. Komponent już obsługuje klik (toggle), drag (malowanie), `clear()` i `getContent()`.
 - **Poprawka row-major w `PaintCanvasComponent.java`** — obecnie `canvas[i][j]` traktuje `i` jako kolumnę i `j` jako wiersz, a `getContent()` serializuje column-major (`i*8+j`). Trzeba ujednolicić do **row-major**: zamienić konwencję w `paintComponent` i `paintEventHandler` tak, aby `canvas[row][col]`, a `getContent()` dawało `fields[row*8 + col]`. Dzięki temu kolejność pikseli jest spójna z CSV (wiersz po wierszu, od góry do dołu).
-- **Przycisk "Zgadnij"** — `paintCanvas.getContent()` → `siec.oblicz_wyjscie()` → sprawdza próg 0.5.
+- **Przycisk "Zgadnij"** — `paintCanvas.getContent()` → `mlpNetwork.oblicz_wyjscie(...)` → ta sama reguła klasyfikacji co w sekcji **„Obsługa nierozpoznania i reguła predykcji (Zgadnij + Test)”** (np. wspólna metoda `predictLetter`).
 - **Przycisk "Wyczyść"** — wywołuje `paintCanvas.clear()` (obok Zgadnij).
 - **Label "Wynik"** — wyświetla rozpoznaną literę lub "Nie rozpoznano".
 
@@ -93,8 +126,8 @@ Rozbudować `Main.java` (nie `Test.java` — ten zostawiamy). Okno podzielone na
 - **Slider epok** — `JSlider` zakres 100–10000, domyślnie 1000, krok 100. Obok `JLabel` z aktualną wartością (aktualizowany `ChangeListener`).
 - **Slider learning rate** — `JSlider` zakres 1–100 (mapowany na 0.01–1.0), domyślnie 10 (= 0.1). Obok `JLabel` z aktualną wartością. Pozwala eksperymentować z prędkością uczenia.
 - **Przycisk "Ucz"** — wczytuje `dane_uczace.csv`, uruchamia uczenie w `SwingWorker` (nie blokuje GUI). **Wielokrotne kliknięcie kontynuuje uczenie** istniejącej sieci (dokłada epoki, wykres MSE dopisuje punkty). Reset sieci = osobny przycisk. Po zakończeniu — `JOptionPane.showMessageDialog` z podsumowaniem (epoki, lr, MSE końcowe, czas).
-- **Przycisk "Testuj"** — wczytuje `dane_testowe.csv`, forward pass, liczy accuracy per klasa. Po zakończeniu — `JOptionPane.showMessageDialog` z wynikiem (E=X%, F=X%, Z=X%, TOTAL=X%).
-- **Przycisk "Reset sieć"** — tworzy nową instancję `Siec` z losowymi wagami (ta sama topologia 64→8→5→3). Czyści wykresy i logi. Pozwala zacząć uczenie od zera bez restartu aplikacji.
+- **Przycisk "Testuj"** — wczytuje `dane_testowe.csv`, forward pass, liczy accuracy per klasa. **Reguła predykcji musi być identyczna jak przy „Zgadnij”** (patrz sekcja poniżej), żeby wynik testu i ręczne zgadywanie były spójne. Po zakończeniu — `JOptionPane.showMessageDialog` z wynikiem (E=X%, F=X%, Z=X%, TOTAL=X%).
+- **Przycisk "Reset sieć"** — tworzy nową instancję `Siec` z losowymi wagami (ta sama topologia 64→8→5→3). **Czyści wykres MSE, wykres accuracy i panel logów** (świadoma decyzja: czysty start). Pozwala zacząć uczenie od zera bez restartu aplikacji.
 - **Radio buttony E/F/Z + "Dopisz"** — pobiera siatkę + wybraną literę → dopisuje wiersz do `dane_uczace.csv`.
 
 ### Prawy panel — panel logów
@@ -116,19 +149,20 @@ Kompaktowy panel pokazujący wartości 3 neuronów wyjściowych po kliknięciu "
 ● E: 0.97    ○ F: 0.03    ○ Z: 0.01
 ```
 
-- Kropka zwycięzcy — zielona wypełniona (`fillOval`) przy neuronie z najwyższą wartością > 0.5.
-- Reszta — szare puste kółka (`drawOval`).
-- Jeśli żaden > 0.5 — wszystkie kropki czerwone (nie rozpoznano).
+- **Spójność z `predictLetter`:** który neuron jest „zwycięzcą” wizualnie musi odpowiadać literze zwróconej przez tę samą logikę co w sekcji predykcji (żaden > 0.5 → brak zwycięzcy; w przeciwnym razie wybór jak w punktach 2–3 tamtej sekcji).
+- Kropka zwycięzcy — zielona wypełniona (`fillOval`) przy wybranym neuronie.
+- Pozostałe — szare puste kółka (`drawOval`).
+- Gdy brak rozpoznania (żaden > 0.5) — wszystkie kropki czerwone.
 - Implementacja: `JPanel` z `paintComponent` — trzy `fillOval`/`drawOval` + `drawString` dla etykiet i wartości.
 
 ### Prawy panel — wykres uczenia (MSE per epoka)
 
 - **Line chart** — średni MSE po każdej epoce, krzywa opadająca = sieć się uczy.
 - Klasa `WykresPanel extends JPanel` z `ArrayList<Double>`.
-- `paintComponent`: osie (`drawLine`), etykiety (`drawString`), punkty łączone linią łamaną.
-- MSE obliczane: `Σ(oczekiwane - wyjście)² / (liczbaPróbek * liczbaWyjść)`.
+- `paintComponent`: na początku **`super.paintComponent(g)`** (wyczyści tło), potem osie (`drawLine`), etykiety (`drawString`), punkty łączone linią łamaną. To samo dla panelu z kropkami wyjść — unikamy nadpisywania rysunku przez domyślne malowanie, gdy komponent stanie się `opaque`.
+- MSE epoki — zgodnie z sekcją „Definicja MSE” (średnia po wyjściach, potem średnia po próbkach).
 - Wymaga zmiany sygnatury `uczEpoka()` na zwracającą `double` (MSE).
-- Aktualizacja co N epok + `repaint()`.
+- **Odświeżanie GUI podczas uczenia:** co **1 epokę** dopisać punkt MSE do listy wykresu i wywołać `repaint()` na panelu wykresu. Log tekstowy (np. „Epoka k/…”) można rzadziej — np. co **10 epok** albo co **1%** całkowitej liczby epok — żeby nie zalać `JTextArea` i nie spowalniać EDT nadmiernie; `SwingWorker.publish()` / `process()`.
 
 ### Prawy panel — wykres testowania (accuracy per klasa)
 
@@ -148,6 +182,12 @@ Kompaktowy panel pokazujący wartości 3 neuronów wyjściowych po kliknięciu "
 - W razie braku pliku: `JOptionPane.showMessageDialog` z komunikatem błędu (np. "Nie znaleziono pliku dane_uczace.csv") + log w panelu logów.
 - Walidacja: sprawdzenie czy wiersz ma dokładnie 65 kolumn (64 piksele + etykieta) i czy etykieta to E/F/Z.
 
+### Ścieżki do plików CSV
+
+- Wczytywanie / dopisywanie: pliki **`dane_uczace.csv`** i **`dane_testowe.csv`** w **katalogu roboczym procesu** (zwykle katalog, z którego uruchamiasz `java`, np. root projektu przy `java -cp out Main` z katalogu głównego).
+- Jeśli plik nie istnieje przy starcie — nie jest błędem; błąd dopiero przy „Ucz” / „Testuj” / „Dopisz” z komunikatem (patrz wyżej).
+- Opcjonalnie na później: stała w kodzie lub prosty dialog wyboru pliku — na MVP wystarczy katalog roboczy + jasna informacja w README dla użytkownika.
+
 ## Format CSV
 
 Plik `dane_uczace.csv` i `dane_testowe.csv`:
@@ -159,13 +199,21 @@ Plik `dane_uczace.csv` i `dane_testowe.csv`:
 
 Każdy wiersz: 64 wartości (0/1) + etykieta (E/F/Z). Konwersja etykiety na one-hot w kodzie.
 
+**Kolejność 64 wartości w CSV:** **row-major**, zgodnie z `PaintCanvasComponent.getContent()` po poprawce — pierwsze 8 liczb = pierwszy wiersz siatki od lewej, itd.
+
 ## Pliki CSV z danymi
 
-Przygotować po kilka wzorcowych próbek literek E, F, Z na siatce 8x8 (ręcznie) w `dane_uczace.csv` i `dane_testowe.csv`, żeby było na czym trenować i testować od razu.
+Treść plików `dane_uczace.csv` i `dane_testowe.csv` **dostarcza użytkownik** (ręcznie lub narzędziami). Aplikacja zakłada poprawny format (65 kolumn, etykieta E/F/Z) i waliduje wiersze; brak gotowych próbek w repozytorium nie blokuje implementacji.
 
-## Obsługa nierozpoznania
+## Obsługa nierozpoznania i reguła predykcji (Zgadnij + Test)
 
-W "Zgadnij": jeśli **żaden** neuron wyjściowy nie przekracza progu 0.5 — wyświetlamy "Nie rozpoznano". Jeśli jeden przekracza — to nasza odpowiedź. Jeśli kilka przekracza — bierzemy ten z największą wartością.
+Wspólna funkcja pomocnicza `predictLetter(double[] wyjscieSieci)` (lub równoważna logika):
+
+1. Jeśli **żaden** z 3 neuronów wyjściowych nie ma wartości **> 0.5** → wynik: brak klasy („Nie rozpoznano” w GUI; przy liczeniu accuracy tę próbkę licz jako **błędną** wobec etykiety).
+2. Jeśli **dokładnie jeden** indeks ma wartość **> 0.5** → przewidywana litera to E / F / Z wg kolejności neuronów `[E, F, Z]`.
+3. Jeśli **więcej niż jeden** ma **> 0.5** → wybierz indeks z **największą** wartością (argmax po całej trójce — remisy rzadkie; można rozstrzygać deterministycznie pierwszym max).
+
+Ta sama reguła dla **„Zgadnij”** oraz przy **liczeniu accuracy w „Testuj”** (porównanie przewidywanej litery z etykietą w CSV).
 
 ## Diagram przepływu backpropagation
 
