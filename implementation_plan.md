@@ -30,6 +30,8 @@ Wyjścia: `[E, F, Z]` — one-hot encoding, np. E = `[1, 0, 0]`, F = `[0, 1, 0]`
 - Dodać pole `double[] ostatnieWejscia` — zapamiętuje wejścia warstwy (potrzebne przy aktualizacji wag).
 - Zmodyfikować `oblicz_wyjscie()` żeby zapisywało `ostatnieWejscia = wejscia`.
 
+> **Kopia vs referencja (`ostatnieWejscia`):** `ostatnieWejscia = wejscia` zapisuje referencję do tablicy przekazanej z zewnątrz. Jeśli wywołujący zmodyfikuje tę tablicę przed wykonaniem backpropu (np. nadpisze danymi następnej próbki), wagi zostaną zaktualizowane na błędnych wartościach, co jest trudne do wykrycia. **Zalecane:** zawsze używaj kopii obronnej: `ostatnieWejscia = Arrays.copyOf(wejscia, wejscia.length)`. Narzut jest pomijalny (64 lub kilka elementów), a eliminuje cały problem.
+
 ### 3. Siec.java
 
 - Pole `pierwszeWejscia` **nie jest potrzebne** — każda `Warstwa` przechowuje swoje `ostatnieWejscia`, więc `warstwy[0].ostatnieWejscia` to oryginalne wejścia sieci.
@@ -46,6 +48,7 @@ Wyjścia: `[E, F, Z]` — one-hot encoding, np. E = `[1, 0, 0]`, F = `[0, 1, 0]`
      wagi[0] += lr * delta;              // bias
      wagi[i] += lr * delta * wejscie[i-1]; // reszta wag
      ```
+     > **Konwencja znaku (`+=` vs `-=`):** delta jest zdefiniowana jako `(target - o) * o*(1-o)` — znak jest już „w kierunku obniżenia błędu". Dlatego poprawna aktualizacja to `+=`. Gdyby ktoś zmienił definicję delty na `(o - target) * ...`, konieczne byłoby `-=`. **Tych konwencji nie wolno mieszać** — zamiana znaku przy tej samej definicji delty odwraca gradient i sieć nigdy nie będzie się uczyć.
 - Dodać metodę `double uczEpoka(double[][] dane, double[][] oczekiwane, double lr)` — iteruje po wszystkich próbkach, mieszając kolejność przed każdą epoką (`shuffle`). Zwraca średnie MSE epoki (potrzebne do wykresu).
 
 ### Definicja MSE (spójność `ucz` / `uczEpoka` / wykres)
@@ -117,6 +120,16 @@ Rozbudować `Main.java` (nie `Test.java` — ten zostawiamy). Okno podzielone na
 
 - **Siatka 8x8** — użyć istniejącego `PaintCanvasComponent(8)`. Komponent już obsługuje klik (toggle), drag (malowanie), `clear()` i `getContent()`.
 - **Poprawka row-major w `PaintCanvasComponent.java`** — obecnie `canvas[i][j]` traktuje `i` jako kolumnę i `j` jako wiersz, a `getContent()` serializuje column-major (`i*8+j`). Trzeba ujednolicić do **row-major**: zamienić konwencję w `paintComponent` i `paintEventHandler` tak, aby `canvas[row][col]`, a `getContent()` dawało `fields[row*8 + col]`. Dzięki temu kolejność pikseli jest spójna z CSV (wiersz po wierszu, od góry do dołu).
+
+  **Mini-test manualny (weryfikacja row-major po poprawce):**
+  | Akcja | Oczekiwany wynik |
+  |-------|-----------------|
+  | Kliknij tylko piksel `[row=0, col=0]` (lewy górny róg) | `getContent()[0] == 1.0`, pozostałe `== 0.0` |
+  | Wyczyść; kliknij `[row=0, col=1]` (drugi od lewej, górny rząd) | `getContent()[1] == 1.0` |
+  | Wyczyść; kliknij `[row=1, col=0]` (pierwszy w drugim rzędzie) | `getContent()[8] == 1.0` |
+  | Wyczyść; kliknij `[row=7, col=7]` (prawy dolny róg) | `getContent()[63] == 1.0` |
+
+  Testy te pozwalają wykryć regresję (odwróconą kolejność), bo wizualnie komponent może nadal wyglądać poprawnie, a wektor wejściowy do sieci byłby przesunięty.
 - **Przycisk "Zgadnij"** — `paintCanvas.getContent()` → `mlpNetwork.oblicz_wyjscie(...)` → ta sama reguła klasyfikacji co w sekcji **„Obsługa nierozpoznania i reguła predykcji (Zgadnij + Test)”** (np. wspólna metoda `predictLetter`).
 - **Przycisk "Wyczyść"** — wywołuje `paintCanvas.clear()` (obok Zgadnij).
 - **Label "Wynik"** — wyświetla rozpoznaną literę lub "Nie rozpoznano".
@@ -128,6 +141,16 @@ Rozbudować `Main.java` (nie `Test.java` — ten zostawiamy). Okno podzielone na
 - **Przycisk "Ucz"** — wczytuje `dane_uczace.csv`, uruchamia uczenie w `SwingWorker` (nie blokuje GUI). **Wielokrotne kliknięcie kontynuuje uczenie** istniejącej sieci (dokłada epoki, wykres MSE dopisuje punkty). Reset sieci = osobny przycisk. Po zakończeniu — `JOptionPane.showMessageDialog` z podsumowaniem (epoki, lr, MSE końcowe, czas).
 - **Przycisk "Testuj"** — wczytuje `dane_testowe.csv`, forward pass, liczy accuracy per klasa. **Reguła predykcji musi być identyczna jak przy „Zgadnij”** (patrz sekcja poniżej), żeby wynik testu i ręczne zgadywanie były spójne. Po zakończeniu — `JOptionPane.showMessageDialog` z wynikiem (E=X%, F=X%, Z=X%, TOTAL=X%).
 - **Przycisk "Reset sieć"** — tworzy nową instancję `Siec` z losowymi wagami (ta sama topologia 64→8→5→3). **Czyści wykres MSE, wykres accuracy i panel logów** (świadoma decyzja: czysty start). Pozwala zacząć uczenie od zera bez restartu aplikacji.
+
+  > **„Reset sieć” vs „Ucz zawsze resetuje” — za i przeciw:**
+  >
+  > | | Osobny przycisk Reset | Ucz zawsze resetuje |
+  > |---|---|---|
+  > | Zaleta | Można douczyć sieć (dokładać epoki bez utraty wag) — przydatne przy eksperymentowaniu z LR | Prostszy interfejs, mniej przycisków |
+  > | Wada | Jeden przycisk więcej w UI | Nie można kontynuować uczenia — każde kliknięcie „Ucz” niszczy dotychczasowe wagi |
+  >
+  > **Rekomendacja:** osobny przycisk „Reset sieć” (obecny plan). Możliwość douczenia jest wartościowa nawet w projekcie uczelnianym i nie komplikuje kodu — różnica to tylko czy przed pętlą epok tworzona jest nowa instancja `Siec`.
+
 - **Radio buttony E/F/Z + "Dopisz"** — pobiera siatkę + wybraną literę → dopisuje wiersz do `dane_uczace.csv`.
 
 ### Prawy panel — panel logów
@@ -201,6 +224,13 @@ Każdy wiersz: 64 wartości (0/1) + etykieta (E/F/Z). Konwersja etykiety na one-
 
 **Kolejność 64 wartości w CSV:** **row-major**, zgodnie z `PaintCanvasComponent.getContent()` po poprawce — pierwsze 8 liczb = pierwszy wiersz siatki od lewej, itd.
 
+**Specyfikacja formatu (szczegóły):**
+- **Separator:** zawsze przecinek (`,`). Inne separatory (średnik, tabulator) nie są obsługiwane.
+- **Białe znaki:** stosuj `trim()` przy parsowaniu każdego pola (po `split(",")`) — dla bezpieczeństwa przy ręcznie edytowanych plikach.
+- **Dozwolone wartości pikseli:** `0` i `1` (liczby całkowite). Format `0.0`/`1.0` jest opcjonalnie tolerowany jeśli parser używa `Double.parseDouble()` zamiast `Integer.parseInt()`.
+- **Zakończenie linii:** toleruj zarówno `LF` (`\n`, Unix) jak i `CRLF` (`\r\n`, Windows) — `BufferedReader.readLine()` obsługuje oba automatycznie.
+- **Puste linie:** ignorowane — parser pomija wiersze, dla których `line.isBlank()` jest `true`.
+
 ## Pliki CSV z danymi
 
 Treść plików `dane_uczace.csv` i `dane_testowe.csv` **dostarcza użytkownik** (ręcznie lub narzędziami). Aplikacja zakłada poprawny format (65 kolumn, etykieta E/F/Z) i waliduje wiersze; brak gotowych próbek w repozytorium nie blokuje implementacji.
@@ -230,3 +260,14 @@ flowchart TD
     H -->|Tak| A
     H -->|Nie| I[Koniec uczenia]
 ```
+
+## Definition of Done
+
+Poniższe kryteria muszą być spełnione, aby implementację uznać za ukończoną:
+
+- [ ] **MSE maleje w czasie** — `uczEpoka()` zwraca `mseEpoka` i na typowym zbiorze uczącym wartość ta spada w kolejnych epokach (weryfikacja na wykresie lub w logach po ~100–500 epokach).
+- [ ] **Spójna predykcja** — „Zgadnij" i „Testuj" wywołują tę samą metodę `predictLetter(double[])` (lub identyczną logikę); wynik klasyfikacji jest identyczny dla tych samych danych wejściowych.
+- [ ] **GUI responsywne** — uczenie działa w `SwingWorker`; interfejs nie zawiesza się podczas uczenia; przyciski Ucz/Testuj/Zgadnij/Reset/Dopisz są blokowane na czas uczenia i odblokowywane po zakończeniu.
+- [ ] **Row-major zweryfikowany** — `PaintCanvasComponent.getContent()` jest zgodne z konwencją row-major (zweryfikowane mini-testem manualnym z tabeli powyżej); kolejność pikseli jest spójna z CSV.
+- [ ] **CSV wczytywane poprawnie** — parser obsługuje format zgodny ze specyfikacją (separator `,`, CRLF/LF, 65 kolumn, etykieta E/F/Z); wiersze z błędami są odrzucane z logiem zamiast crashować aplikację.
+- [ ] **Reset działa czysto** — „Reset sieć" tworzy nową instancję `Siec` z losowymi wagami i czyści wykres MSE, wykres accuracy oraz panel logów.
