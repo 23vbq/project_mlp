@@ -2,7 +2,11 @@
 
 ## Stan obecny
 
-Istniejące klasy (`Neuron`, `Warstwa`, `Siec`) implementują jedynie forward pass. `Test.java` to demo wizualizacji 2D — zostanie zastąpiony nowym GUI. Trzeba dodać backpropagation i nowy interfejs.
+Istniejące klasy profesora (`Neuron`, `Warstwa`, `Siec`) implementują jedynie forward pass. `Test.java` to demo wizualizacji 2D profesora — **zostawiamy jako referencję, nie ruszamy**.
+
+Nowe pliki dodane ręcznie:
+- **`Main.java`** — nowy punkt wejścia aplikacji (`JFrame`). Zawiera szkielet GUI (`buildUI()`) i inicjalizację sieci z poprawną topologią `{8, 5, 3}` / 64 wejścia.
+- **`PaintCanvasComponent.java`** — gotowy komponent siatki 8x8 (`JComponent`). Obsługuje klik (toggle) i drag (malowanie), `clear()`, `getContent()` → `double[64]`. Wymaga poprawki kolejności pikseli (patrz niżej).
 
 ## Topologia sieci
 
@@ -44,9 +48,9 @@ Wyjścia: `[E, F, Z]` — one-hot encoding, np. E = `[1, 0, 0]`, F = `[0, 1, 0]`
      ```
 - Dodać metodę `double uczEpoka(double[][] dane, double[][] oczekiwane, double lr)` — iteruje po wszystkich próbkach, mieszając kolejność przed każdą epoką (`shuffle`). Zwraca średnie MSE epoki (potrzebne do wykresu).
 
-## Nowy GUI — Test.java (przebudowa)
+## GUI — Main.java (rozbudowa istniejącego szkieletu)
 
-Przebudować `Test.java` na aplikację Swing. Okno podzielone na dwie kolumny (lewy panel + prawy panel). Lewy panel podzielony horyzontalnie na dwie sekcje.
+Rozbudować `Main.java` (nie `Test.java` — ten zostawiamy). Okno podzielone na dwie kolumny (lewy panel + prawy panel). Lewy panel podzielony horyzontalnie na dwie sekcje.
 
 ### Layout okna
 
@@ -78,9 +82,10 @@ Przebudować `Test.java` na aplikację Swing. Okno podzielone na dwie kolumny (l
 
 ### Lewy panel — góra (rysowanie + zgadywanie)
 
-- **Siatka 8x8** — `JPanel` z `GridLayout(8,8)`. Każda komórka to klikalna kratka (`MouseListener`), klik przełącza biały (0) ↔ czarny (1). Wewnętrznie `int[8][8]`. Kolejność odczytu do `double[64]`: **row-major** (wiersz po wierszu, `index = row*8 + col`) — taka sama w GUI i CSV.
-- **Przycisk "Zgadnij"** — pobiera siatke jako `double[64]` → `siec.oblicz_wyjscie()` → sprawdza próg 0.5.
-- **Przycisk "Wyczyść"** — zeruje siatkę 8x8 (obok Zgadnij).
+- **Siatka 8x8** — użyć istniejącego `PaintCanvasComponent(8)`. Komponent już obsługuje klik (toggle), drag (malowanie), `clear()` i `getContent()`.
+- **Poprawka row-major w `PaintCanvasComponent.java`** — obecnie `canvas[i][j]` traktuje `i` jako kolumnę i `j` jako wiersz, a `getContent()` serializuje column-major (`i*8+j`). Trzeba ujednolicić do **row-major**: zamienić konwencję w `paintComponent` i `paintEventHandler` tak, aby `canvas[row][col]`, a `getContent()` dawało `fields[row*8 + col]`. Dzięki temu kolejność pikseli jest spójna z CSV (wiersz po wierszu, od góry do dołu).
+- **Przycisk "Zgadnij"** — `paintCanvas.getContent()` → `siec.oblicz_wyjscie()` → sprawdza próg 0.5.
+- **Przycisk "Wyczyść"** — wywołuje `paintCanvas.clear()` (obok Zgadnij).
 - **Label "Wynik"** — wyświetla rozpoznaną literę lub "Nie rozpoznano".
 
 ### Lewy panel — dół (uczenie + testowanie + dopisywanie)
