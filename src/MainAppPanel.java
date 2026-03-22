@@ -6,12 +6,12 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
 import javax.swing.*;
+import javax.swing.event.*;
 
 public class MainAppPanel extends JPanel {
 
 	private static final DateTimeFormatter LOG_TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
 
-	private final JFrame parentFrame;
 	private Siec mlpNetwork;
 
 	private final PaintCanvasComponent paintCanvas;
