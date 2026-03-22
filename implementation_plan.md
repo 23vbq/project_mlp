@@ -5,7 +5,7 @@
 Istniejące klasy profesora (`Neuron`, `Warstwa`, `Siec`) implementują jedynie forward pass. `Test.java` to demo wizualizacji 2D profesora — **zostawiamy jako referencję, nie ruszamy**.
 
 Nowe pliki dodane ręcznie:
-- **`Main.java`** — nowy punkt wejścia aplikacji (`JFrame`). Zawiera szkielet GUI (`buildUI()`) i inicjalizację sieci z poprawną topologią `{8, 5, 3}` / 64 wejścia.
+- **`Main.java`** — punkt wejścia: `JFrame` + `main`. Tworzy sieć `Siec`, **wstawia całe GUI jako jeden panel** (osobna klasa — patrz „Architektura UI” poniżej). Bez rozbudowanego `buildUI()` w `Main`.
 - **`PaintCanvasComponent.java`** — gotowy komponent siatki 8x8 (`JComponent`). Obsługuje klik (toggle) i drag (malowanie), `clear()`, `getContent()` → `double[64]`. Wymaga poprawki kolejności pikseli (patrz niżej).
 
 ## Topologia sieci
@@ -80,13 +80,37 @@ Suma w kroku propagacji: po wszystkich `k` w warstwie `l+1`: `Σ_k delta_k * neu
 - Nie mieszać osobno tablic `dane` i `oczekiwane` niezależnie (rozjadą się pary).
 - **Poprawnie:** utworzyć listę indeksów `0..N-1`, wykonać `Collections.shuffle` na tej liście, następnie iterować próbki w kolejności `indeksy[i]` — tak samo dla `dane` i `oczekiwane`.
 
-## GUI — Main.java (rozbudowa istniejącego szkieletu)
+## GUI — Main.java + osobna klasa panelu
 
-Rozbudować `Main.java` (nie `Test.java` — ten zostawiamy). Okno podzielone na dwie kolumny (lewy panel + prawy panel). Lewy panel podzielony horyzontalnie na dwie sekcje.
+`Test.java` zostawiamy. Okno aplikacji: dwie kolumny (lewy + prawy), lewy podzielony horyzontalnie (góra: rysowanie, dół: sterowanie).
 
-**Pole sieci:** w kodzie może nazywać się np. `mlpNetwork` (jak w szkielecie) — w planie oznacza instancję `Siec`.
+### Architektura UI (Main vs panel — bez singletona)
 
-**Layout (Swing):** prosty wariant — główne okno `BorderLayout` lub `JSplitPane` (lewo/prawo); lewa kolumna `JSplitPane` pionowy (góra: rysowanie, dół: sterowanie) albo dwa panele w `BorderLayout.NORTH` / `SOUTH`; prawa kolumna `BorderLayout` (logi `NORTH`, wyjścia neuronów `CENTER`, dół: dwa `JPanel` obok siebie w kontenerze z `GridLayout(1,2)` lub zagnieżdżony `JSplitPane`). Celem jest czytelny podział bez `GridBagLayout`, chyba że będzie potrzebny.
+**Rekomendacja:** wyciągnąć budowę i obsługę zdarzeń z `Main` do osobnej klasy **`MainAppPanel extends JPanel`**. W konstruktorze panelu: tworzenie wszystkich podkomponentów (`PaintCanvasComponent`, przyciski, slidery, log, wykresy), `addActionListener` / `SwingWorker` — cała logika „co po kliknięciu” żyje przy panelu.
+
+**Jak handlery przycisków wołają `mlpNetwork` (bez singletona):**
+- `Main` tworzy `Siec siec = new Siec(...)` i przekazuje **referencję** do panelu: `new MainAppPanel(siec, frame)`.
+- W `MainAppPanel`: pole `private Siec mlpNetwork;` — w konstruktorze `this.mlpNetwork = siec;` (lub parametr nazwany tak samo).
+- Każdy listener to metoda instancji panelu albo lambda zdefiniowana w konstruktorze panelu — ma dostęp do **`this.mlpNetwork`**, `this.paintCanvas`, `this.logArea` itd. Np. Zgadnij: `double[] in = paintCanvas.getContent(); double[] out = mlpNetwork.oblicz_wyjscie(in);`
+- Przy **„Reset sieć”** panel robi `this.mlpNetwork = new Siec(64, 3, new int[]{8,5,3});` — ta sama referencja w polu, dalej te same listenery działają na nowej sieci (nie trzeba ich przepinać).
+
+**`Main` zostaje cienki:**
+- `main` → `EventQueue.invokeLater`
+- `Siec mlpNetwork = new Siec(64, 3, new int[]{8,5,3});`
+- `JFrame frame = new JFrame("...");`
+- `frame.setContentPane(new MainAppPanel(mlpNetwork, frame));` — przekazanie **`JFrame` (lub `Window`) jako rodzica** do `JOptionPane`.
+- `frame.pack()` / rozmiar, `setDefaultCloseOperation`, `setVisible(true)`
+
+**Dlaczego nie `public static Main instance`:**
+- Singleton na `Main` **nie jest potrzebny** — słuchacze to lambdy / metody `MainAppPanel` i widzą `this` (w tym `mlpNetwork`, `logArea`, `paintCanvas`).
+- Singleton utrudnia testy, wiąże całą aplikację globalnie i z czasem prowadzi do „doklejania” kolejnych `Main.getInstance().getCoś()`.
+- Jeśli kiedyś pojawi się klasa poza panelem (np. osobny loader CSV), wystarczy przekazać jej **referencję** (np. `Consumer<String> log`, albo mały interfejs `AppCallbacks`) przez konstruktor — nadal bez globalnego `Main`.
+
+**`extends JPanel` vs zwykła klasa:** `extends JPanel` jest naturalne — całe UI to jeden duży panel wypełniający `JFrame`. Alternatywa: klasa `AppView` z metodą `JPanel buildRoot()` — równie OK; dla projektu studenckiego `MainAppPanel` + składanie w konstruktorze jest prostsze.
+
+### Layout (Swing)
+
+Prosty wariant — główne okno `BorderLayout` lub `JSplitPane` (lewo/prawo); lewa kolumna `JSplitPane` pionowy (góra: rysowanie, dół: sterowanie) albo dwa panele w `BorderLayout.NORTH` / `SOUTH`; prawa kolumna `BorderLayout` (logi `NORTH`, wyjścia neuronów `CENTER`, dół: dwa `JPanel` obok siebie w kontenerze z `GridLayout(1,2)` lub zagnieżdżony `JSplitPane`). Celem jest czytelny podział bez `GridBagLayout`, chyba że będzie potrzebny.
 
 ### Layout okna
 
