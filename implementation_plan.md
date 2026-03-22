@@ -80,15 +80,9 @@ Suma w kroku propagacji: po wszystkich `k` w warstwie `l+1`: `Σ_k delta_k * neu
 - Nie mieszać osobno tablic `dane` i `oczekiwane` niezależnie (rozjadą się pary).
 - **Poprawnie:** utworzyć listę indeksów `0..N-1`, wykonać `Collections.shuffle` na tej liście, następnie iterować próbki w kolejności `indeksy[i]` — tak samo dla `dane` i `oczekiwane`.
 
-### Wczesne zatrzymanie / guard rails *(opcjonalne, non-MVP)*
+### Wczesne zatrzymanie *(opcjonalne, non-MVP)*
 
-Poniższe mechanizmy **nie są wymagane w MVP**, ale warto je uwzględnić w przyszłości:
-
-- **Plateau MSE:** jeśli `mseEpoka` nie spada o więcej niż ε (np. `1e-6`) przez K kolejnych epok (np. K=50), zatrzymaj uczenie i wyświetl komunikat „MSE ustabilizowane".
-- **Limit czasu:** maksymalny czas uczenia (np. 60 s) po którym `SwingWorker` kończy pętlę — zapobiega zawieszeniu GUI przy bardzo dużych datasetach lub małym LR.
-- **Minimalne MSE:** opcjonalny próg docelowy — przerwij wcześniej gdy `mseEpoka < mseDocelowe` (konfigurowalne przez użytkownika).
-
-Można dodać te opcje jako dodatkowe pola w panelu sterowania (np. `JCheckBox "Wczesne zatrzymanie"` + pole tekstowe z progiem) — bez wpływu na resztę logiki MVP.
+Można dodać prostą flagę `stopped` w `SwingWorker` i przycisk „Stop" do przerwania uczenia w dowolnym momencie — bez dodatkowych kryteriów stopu. Więcej mechanizmów (plateau MSE, limit czasu) wykracza poza zakres projektu.
 
 ## GUI — Main.java (rozbudowa istniejącego szkieletu)
 
@@ -151,6 +145,16 @@ Rozbudować `Main.java` (nie `Test.java` — ten zostawiamy). Okno podzielone na
 - **Przycisk "Ucz"** — wczytuje `dane_uczace.csv`, uruchamia uczenie w `SwingWorker` (nie blokuje GUI). **Wielokrotne kliknięcie kontynuuje uczenie** istniejącej sieci (dokłada epoki, wykres MSE dopisuje punkty). Reset sieci = osobny przycisk. Po zakończeniu — `JOptionPane.showMessageDialog` z podsumowaniem (epoki, lr, MSE końcowe, czas).
 - **Przycisk "Testuj"** — wczytuje `dane_testowe.csv`, forward pass, liczy accuracy per klasa. **Reguła predykcji musi być identyczna jak przy „Zgadnij”** (patrz sekcja poniżej), żeby wynik testu i ręczne zgadywanie były spójne. Po zakończeniu — `JOptionPane.showMessageDialog` z wynikiem (E=X%, F=X%, Z=X%, TOTAL=X%).
 - **Przycisk "Reset sieć"** — tworzy nową instancję `Siec` z losowymi wagami (ta sama topologia 64→8→5→3). **Czyści wykres MSE, wykres accuracy i panel logów** (świadoma decyzja: czysty start). Pozwala zacząć uczenie od zera bez restartu aplikacji.
+
+  > **„Reset sieć” vs „Ucz zawsze resetuje” — za i przeciw:**
+  >
+  > | | Osobny przycisk Reset | Ucz zawsze resetuje |
+  > |---|---|---|
+  > | Zaleta | Można douczyć sieć (dokładać epoki bez utraty wag) — przydatne przy eksperymentowaniu z LR | Prostszy interfejs, mniej przycisków |
+  > | Wada | Jeden przycisk więcej w UI | Nie można kontynuować uczenia — każde kliknięcie „Ucz” niszczy dotychczasowe wagi |
+  >
+  > **Rekomendacja:** osobny przycisk „Reset sieć” (obecny plan). Możliwość douczenia jest wartościowa nawet w projekcie uczelnianym i nie komplikuje kodu — różnica to tylko czy przed pętlą epok tworzona jest nowa instancja `Siec`.
+
 - **Radio buttony E/F/Z + "Dopisz"** — pobiera siatkę + wybraną literę → dopisuje wiersz do `dane_uczace.csv`.
 
 ### Prawy panel — panel logów
@@ -226,7 +230,7 @@ Każdy wiersz: 64 wartości (0/1) + etykieta (E/F/Z). Konwersja etykiety na one-
 
 **Specyfikacja formatu (szczegóły):**
 - **Separator:** zawsze przecinek (`,`). Inne separatory (średnik, tabulator) nie są obsługiwane.
-- **Białe znaki:** niedozwolone — parser dzieli po `,` bez `trim()`. Spacja wokół wartości spowoduje błąd parsowania lub nieprawidłową wartość. Pliki generowane przez „Dopisz" muszą spełniać ten warunek automatycznie.
+- **Białe znaki:** stosuj `trim()` przy parsowaniu każdego pola (po `split(",")`) — dla bezpieczeństwa przy ręcznie edytowanych plikach.
 - **Dozwolone wartości pikseli:** `0` i `1` (liczby całkowite). Format `0.0`/`1.0` jest opcjonalnie tolerowany jeśli parser używa `Double.parseDouble()` zamiast `Integer.parseInt()`.
 - **Zakończenie linii:** toleruj zarówno `LF` (`\n`, Unix) jak i `CRLF` (`\r\n`, Windows) — `BufferedReader.readLine()` obsługuje oba automatycznie.
 - **Puste linie:** ignorowane — parser pomija wiersze, dla których `line.isBlank()` jest `true`.
