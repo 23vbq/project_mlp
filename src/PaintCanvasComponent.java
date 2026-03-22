@@ -32,23 +32,24 @@ public class PaintCanvasComponent extends JComponent {
 	}
 	
 	public void clear() {
-		for (int i = 0; i < ceilsAmount; i++) {
-			for (int j = 0; j < ceilsAmount; j++) {
-				canvas[i][j] = false;
+		for (int row = 0; row < ceilsAmount; row++) {
+			for (int col = 0; col < ceilsAmount; col++) {
+				canvas[row][col] = false;
 			}
 		}
+		
 		repaint();
 	}
 	
 	public double[] getContent() {
 		double[] fields = new double[ceilsAmount * ceilsAmount];
-		
-		for (int i = 0; i < ceilsAmount; i++) {
-			for (int j = 0; j < ceilsAmount; j++) {
-				fields[i * ceilsAmount + j] = canvas[i][j] ? 1.0 : 0.0;
+
+		for (int row = 0; row < ceilsAmount; row++) {
+			for (int col = 0; col < ceilsAmount; col++) {
+				fields[row * ceilsAmount + col] = canvas[row][col] ? 1.0 : 0.0;
 			}
 		}
-		
+
 		return fields;
 	}
 	
@@ -58,44 +59,36 @@ public class PaintCanvasComponent extends JComponent {
 	
 	@Override
 	protected void paintComponent(Graphics g) {
+		super.paintComponent(g);
+
 		int cellW = getCeilWidth();
 		int cellH = getCeilHeight();
-		
-		for (int i = 0; i < ceilsAmount; i++) {
-			for (int j = 0; j < ceilsAmount; j++) {
+
+		for (int row = 0; row < ceilsAmount; row++) {
+			for (int col = 0; col < ceilsAmount; col++) {
 				g.setColor(Color.GRAY);
-				g.fillRect(i * cellW, j * cellH, cellW, cellH);
-				
-				g.setColor(canvas[i][j] ? Color.BLACK : Color.WHITE);
-				g.fillRect(i * cellW + 1, j * cellH + 1, cellW - 2, cellH - 2);
+				g.fillRect(col * cellW, row * cellH, cellW, cellH);
+				g.setColor(canvas[row][col] ? Color.BLACK : Color.WHITE);
+				g.fillRect(col * cellW + 1, row * cellH + 1, cellW - 2, cellH - 2);
 			}
 		}
-		
-		super.paintComponent(g);
 	}
 	
 	private void paintEventHandler(MouseEvent e, boolean force) {
 		int cellW = getCeilWidth();
 		int cellH = getCeilHeight();
-		
-		int i = e.getX() / cellW;
-		int j = e.getY() / cellH;
-		
-		if (
-			i < 0
-			|| i > ceilsAmount - 1
-			|| j < 0
-			|| j > ceilsAmount - 1
-		) {
+		int col = e.getX() / cellW;
+		int row = e.getY() / cellH;
+
+		if (col < 0 || col > ceilsAmount - 1 || row < 0 || row > ceilsAmount - 1) {
 			return;
 		}
-		
+
 		if (force) {
-			canvas[i][j] = true;
+			canvas[row][col] = true;
 		} else {
-			canvas[i][j] = !canvas[i][j];
+			canvas[row][col] = !canvas[row][col];
 		}
-		
 		repaint();
 	}
 	
