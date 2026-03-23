@@ -4,3 +4,4 @@
 bin/
 dane_uczace.csv
 dane_testowe.csv
+__pycache__/
