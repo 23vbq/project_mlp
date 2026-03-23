@@ -13,20 +13,13 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 
-/**
- * Trzy neurony wyjściowe (E, F, Z): kropka + litera + wartość.
- * Logika predykcji podłączymy później; na razie {@link #setIdle()}.
- */
+
 public class NetworkOutputsPanel extends JPanel {
 
 	public enum DotMode {
-		/** Szara obwódka (brak aktywności / start). */
 		IDLE,
-		/** Zielone wypełnienie — ten neuron „wygrał”. */
 		WINNER,
-		/** Szara pusta — pozostałe przy wygranej jednej klasie. */
 		OTHER,
-		/** Czerwone — żaden niepewny (plan: próg 0.5). */
 		ALL_UNCERTAIN
 	}
 
@@ -48,7 +41,7 @@ public class NetworkOutputsPanel extends JPanel {
 
 			dots[i] = new DotIndicator();
 			valueLabels[i] = new JLabel("—", SwingConstants.CENTER);
-			valueLabels[i].setFont(valueLabels[i].getFont().deriveFont(Font.MONOSPACED, 12f));
+			valueLabels[i].setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
 
 			cell.add(dots[i]);
 			cell.add(new JLabel(LETTERS[i]));
@@ -60,7 +53,6 @@ public class NetworkOutputsPanel extends JPanel {
 		setIdle();
 	}
 
-	/** Stan początkowy / po wyczyszczeniu podglądu. */
 	public void setIdle() {
 		for (int i = 0; i < 3; i++) {
 			dots[i].setMode(DotMode.IDLE);
@@ -69,9 +61,6 @@ public class NetworkOutputsPanel extends JPanel {
 		repaint();
 	}
 
-	/**
-	 * Ustawia surowe wartości i tryb kropek (bez logiki progów — tylko UI).
-	 */
 	public void setReadout(double v0, double v1, double v2, DotMode m0, DotMode m1, DotMode m2) {
 		valueLabels[0].setText(String.format("%.2f", v0));
 		valueLabels[1].setText(String.format("%.2f", v1));

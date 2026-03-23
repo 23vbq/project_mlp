@@ -6,6 +6,8 @@ import java.awt.Font;
 import java.awt.GridLayout;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Dictionary;
+import java.util.Enumeration;
 
 import javax.swing.*;
 import javax.swing.event.*;
@@ -47,6 +49,7 @@ public class MainAppPanel extends JPanel {
 		logArea.setEditable(false);
 		logArea.setLineWrap(true);
 		logArea.setWrapStyleWord(true);
+		logArea.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
 		JScrollPane logScroll = new JScrollPane(logArea);
 		logScroll.setBorder(BorderFactory.createTitledBorder("Log"));
 
@@ -82,36 +85,39 @@ public class MainAppPanel extends JPanel {
 		letterGroup.add(radioZ);
 
 		networkOutputsPanel = new NetworkOutputsPanel();
+		networkOutputsPanel.setPreferredSize(new Dimension(10, 64));
 
 		trainingChartPlaceholder = new JPanel(new BorderLayout());
 		trainingChartPlaceholder.setBorder(BorderFactory.createTitledBorder("Wykres MSE (uczenie)"));
 		trainingChartPlaceholder.add(new JLabel(" ", SwingConstants.CENTER), BorderLayout.CENTER);
-		trainingChartPlaceholder.setPreferredSize(new Dimension(200, 160));
+		trainingChartPlaceholder.setPreferredSize(new Dimension(240, 180));
 
 		testChartPlaceholder = new JPanel(new BorderLayout());
 		testChartPlaceholder.setBorder(BorderFactory.createTitledBorder("Wykres accuracy (test)"));
 		testChartPlaceholder.add(new JLabel(" ", SwingConstants.CENTER), BorderLayout.CENTER);
-		testChartPlaceholder.setPreferredSize(new Dimension(200, 160));
+		testChartPlaceholder.setPreferredSize(new Dimension(240, 180));
 
-		JPanel chartsRow = new JPanel(new GridLayout(1, 2, 8, 0));
-		chartsRow.add(trainingChartPlaceholder);
-		chartsRow.add(testChartPlaceholder);
+		JPanel chartsColumn = new JPanel(new GridLayout(2, 1, 0, 8));
+		chartsColumn.add(trainingChartPlaceholder);
+		chartsColumn.add(testChartPlaceholder);
 
 		JPanel rightColumn = new JPanel(new BorderLayout(0, 8));
 		rightColumn.add(logScroll, BorderLayout.NORTH);
-		rightColumn.add(networkOutputsPanel, BorderLayout.CENTER);
-		rightColumn.add(chartsRow, BorderLayout.SOUTH);
+		JPanel rightCenter = new JPanel(new BorderLayout(0, 8));
+		rightCenter.add(networkOutputsPanel, BorderLayout.NORTH);
+		rightCenter.add(chartsColumn, BorderLayout.CENTER);
+		rightColumn.add(rightCenter, BorderLayout.CENTER);
 
 		JPanel leftTop = buildLeftTopPanel();
 		JPanel leftBottom = buildLeftBottomPanel();
 
-		JSplitPane leftSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, leftTop, leftBottom);
-		leftSplit.setResizeWeight(0.55);
-		leftSplit.setOneTouchExpandable(true);
+		JPanel leftColumn = new JPanel(new BorderLayout(0, 8));
+		leftColumn.add(leftTop, BorderLayout.CENTER);
+		leftColumn.add(leftBottom, BorderLayout.SOUTH);
 
 		JPanel leftWrapper = new JPanel(new BorderLayout());
 		leftWrapper.setBorder(BorderFactory.createTitledBorder("Siatka i uczenie"));
-		leftWrapper.add(leftSplit, BorderLayout.CENTER);
+		leftWrapper.add(leftColumn, BorderLayout.CENTER);
 
 		JPanel rightWrapper = new JPanel(new BorderLayout());
 		rightWrapper.setBorder(BorderFactory.createTitledBorder("Log, wyjścia i wykresy"));
@@ -179,7 +185,7 @@ public class MainAppPanel extends JPanel {
 		lrSouth.add(learningRateValueLabel, BorderLayout.EAST);
 		lrRow.add(lrSouth, BorderLayout.CENTER);
 
-		JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
 		JButton trainBtn = new JButton("Ucz");
 		trainBtn.addActionListener(e -> onTrain());
 		JButton testBtn = new JButton("Testuj");
@@ -189,23 +195,29 @@ public class MainAppPanel extends JPanel {
 		actions.add(trainBtn);
 		actions.add(testBtn);
 		actions.add(resetBtn);
+		JPanel actionsGroup = new JPanel(new BorderLayout());
+		actionsGroup.setBorder(BorderFactory.createTitledBorder("Akcje sieci"));
+		actionsGroup.add(actions, BorderLayout.CENTER);
 
-		JPanel letters = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		JPanel letters = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
 		letters.add(new JLabel("Etykieta:"));
 		letters.add(radioE);
 		letters.add(radioF);
 		letters.add(radioZ);
 
-		JPanel appendRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+		JPanel appendRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
 		JButton appendBtn = new JButton("Dopisz do ciągu uczącego");
 		appendBtn.addActionListener(e -> onAppendTraining());
 		appendRow.add(appendBtn);
+		JPanel dataGroup = new JPanel(new BorderLayout(0, 4));
+		dataGroup.setBorder(BorderFactory.createTitledBorder("Dane uczące"));
+		dataGroup.add(letters, BorderLayout.NORTH);
+		dataGroup.add(appendRow, BorderLayout.CENTER);
 
 		p.add(epochRow);
 		p.add(lrRow);
-		p.add(actions);
-		p.add(letters);
-		p.add(appendRow);
+		p.add(actionsGroup);
+		p.add(dataGroup);
 
 		return p;
 	}
@@ -220,12 +232,15 @@ public class MainAppPanel extends JPanel {
 	private static void styleSliderFont(JSlider s) {
 		Font f = s.getFont().deriveFont(Font.PLAIN, Math.max(11f, s.getFont().getSize2D() - 0.5f));
 		s.setFont(f);
-		if (s.getLabelTable() != null) {
-			s.getLabelTable().values().forEach(l -> {
-				if (l instanceof JLabel) {
-					((JLabel) l).setFont(f);
+		Dictionary<?, ?> labelTable = s.getLabelTable();
+		if (labelTable != null) {
+			Enumeration<?> labels = labelTable.elements();
+			while (labels.hasMoreElements()) {
+				Object label = labels.nextElement();
+				if (label instanceof JLabel) {
+					((JLabel) label).setFont(f);
 				}
-			});
+			}
 		}
 	}
 
