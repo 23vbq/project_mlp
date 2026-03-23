@@ -3,9 +3,7 @@
 Generate synthetic 8x8 CSV datasets for letters E, F, Z.
 
 Output format per row:
-    64 binary values in row-major order + label (E/F/Z/N)
-
-Label N means random/unknown letter-like sample used only in tests.
+  64 binary values in row-major order + label (E/F/Z)
 
 Default outputs:
   - dane_uczace.csv
@@ -105,19 +103,6 @@ def to_row_major(grid: Grid) -> List[int]:
     return [grid[r][c] for r in range(8) for c in range(8)]
 
 
-def draw_line(grid: Grid, r0: int, c0: int, r1: int, c1: int) -> None:
-    steps = max(abs(r1 - r0), abs(c1 - c0))
-    if steps == 0:
-        grid[r0][c0] = 1
-        return
-    for i in range(steps + 1):
-        t = i / steps
-        rr = int(round(r0 + (r1 - r0) * t))
-        cc = int(round(c0 + (c1 - c0) * t))
-        if 0 <= rr < 8 and 0 <= cc < 8:
-            grid[rr][cc] = 1
-
-
 def synthesize(label: str, rng: random.Random, *, hard: bool) -> List[int]:
     g = base_pattern(label)
 
@@ -134,25 +119,6 @@ def synthesize(label: str, rng: random.Random, *, hard: bool) -> List[int]:
 
     # Pixel flips simulate imperfect drawing.
     g = flip_noise(g, rng, prob=0.015 if not hard else 0.03)
-
-    return to_row_major(g)
-
-
-def synthesize_random_unknown(rng: random.Random, *, hard: bool) -> List[int]:
-    g = blank_grid()
-
-    # Draw a random glyph-like shape from line segments.
-    stroke_count = rng.randint(3, 5 if hard else 4)
-    for _ in range(stroke_count):
-        r0, c0 = rng.randint(0, 7), rng.randint(0, 7)
-        r1, c1 = rng.randint(0, 7), rng.randint(0, 7)
-        draw_line(g, r0, c0, r1, c1)
-
-    if rng.random() < 0.6:
-        g = thicken(g, rng, prob=0.20 if not hard else 0.28)
-    if rng.random() < 0.25:
-        g = dropout(g, rng, prob=0.10 if not hard else 0.16)
-    g = flip_noise(g, rng, prob=0.02 if not hard else 0.04)
 
     return to_row_major(g)
 
@@ -186,12 +152,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--test-out", default="dane_testowe.csv", help="Output path for testing CSV.")
     parser.add_argument("--train-per-class", type=int, default=300, help="Samples per class for training set.")
     parser.add_argument("--test-per-class", type=int, default=90, help="Samples per class for test set.")
-    parser.add_argument(
-        "--test-random-count",
-        type=int,
-        default=60,
-        help="Number of random unknown (N) samples added to test set.",
-    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
     parser.add_argument(
         "--hard-test",
@@ -208,9 +168,6 @@ def main() -> None:
     labels = ("E", "F", "Z")
     train_rows = generate_rows(labels, args.train_per_class, rng, hard=False)
     test_rows = generate_rows(labels, args.test_per_class, rng, hard=args.hard_test)
-    for _ in range(max(0, args.test_random_count)):
-        test_rows.append((synthesize_random_unknown(rng, hard=args.hard_test), "N"))
-    rng.shuffle(test_rows)
 
     train_path = Path(args.train_out)
     test_path = Path(args.test_out)
@@ -219,9 +176,7 @@ def main() -> None:
     write_csv(test_path, test_rows)
 
     print(f"Generated: {train_path} ({len(train_rows)} rows)")
-    print(
-        f"Generated: {test_path} ({len(test_rows)} rows, including {max(0, args.test_random_count)} label N)"
-    )
+    print(f"Generated: {test_path} ({len(test_rows)} rows)")
 
 
 if __name__ == "__main__":
