@@ -284,6 +284,90 @@ def synthesize_unknown(rng: random.Random, *, hard: bool) -> List[int]:
     return to_row_major(g)
 
 
+def synthesize_empty_unknown(rng: random.Random, *, hard: bool) -> List[int]:
+    g = blank_grid()
+    # Keep most empty samples truly empty, but allow tiny accidental noise.
+    if rng.random() < (0.15 if not hard else 0.25):
+        g = flip_noise(g, rng, prob=0.01 if not hard else 0.02)
+    return to_row_major(g)
+
+
+def synthesize_line_unknown(rng: random.Random, *, hard: bool) -> List[int]:
+    g = blank_grid()
+    stroke_count = rng.randint(1, 2 if not hard else 3)
+    for _ in range(stroke_count):
+        r0, c0 = rng.randint(0, 7), rng.randint(0, 7)
+        r1, c1 = rng.randint(0, 7), rng.randint(0, 7)
+        draw_line(g, r0, c0, r1, c1)
+
+    if rng.random() < (0.30 if not hard else 0.45):
+        g = thicken(g, rng, prob=0.10 if not hard else 0.16)
+    if rng.random() < (0.12 if not hard else 0.20):
+        g = dropout(g, rng, prob=0.10 if not hard else 0.16)
+    g = flip_noise(g, rng, prob=0.01 if not hard else 0.02)
+    return to_row_major(g)
+
+
+def synthesize_obvious_confuser_unknown(rng: random.Random, *, hard: bool) -> List[int]:
+    g = blank_grid()
+
+    variant = rng.randint(0, 5)
+    if variant == 0:
+        # Left vertical line -> commonly confused with F backbone.
+        col = rng.choice([0, 1])
+        draw_line(g, 0, col, 7, col)
+    elif variant == 1:
+        # Top + bottom bars -> commonly confused with Z frame.
+        top = rng.choice([0, 1])
+        bottom = rng.choice([6, 7])
+        draw_line(g, top, 0, top, 7)
+        draw_line(g, bottom, 0, bottom, 7)
+    elif variant == 2:
+        # Top bar only.
+        row = rng.choice([0, 1])
+        draw_line(g, row, 0, row, 7)
+    elif variant == 3:
+        # Bottom bar only.
+        row = rng.choice([6, 7])
+        draw_line(g, row, 0, row, 7)
+    elif variant == 4:
+        # Left vertical + top bar (partial F-like).
+        col = rng.choice([0, 1])
+        row = rng.choice([0, 1])
+        draw_line(g, 0, col, 7, col)
+        draw_line(g, row, 0, row, 7)
+    else:
+        # Top + bottom + short diagonal fragment (partial Z-like).
+        top = rng.choice([0, 1])
+        bottom = rng.choice([6, 7])
+        draw_line(g, top, 0, top, 7)
+        draw_line(g, bottom, 0, bottom, 7)
+        draw_line(g, 2, 5, 5, 2)
+
+    if rng.random() < (0.28 if not hard else 0.42):
+        g = thicken(g, rng, prob=0.10 if not hard else 0.16)
+    if rng.random() < (0.16 if not hard else 0.24):
+        g = dropout(g, rng, prob=0.10 if not hard else 0.16)
+    g = flip_noise(g, rng, prob=0.01 if not hard else 0.02)
+    return to_row_major(g)
+
+
+def synthesize_noise_unknown(rng: random.Random, *, hard: bool) -> List[int]:
+    g = blank_grid()
+    on_prob = 0.07 if not hard else 0.11
+    for r in range(8):
+        for c in range(8):
+            if rng.random() < on_prob:
+                g[r][c] = 1
+
+    if rng.random() < (0.25 if not hard else 0.40):
+        g = thicken(g, rng, prob=0.12 if not hard else 0.18)
+    if rng.random() < (0.20 if not hard else 0.30):
+        g = dropout(g, rng, prob=0.14 if not hard else 0.22)
+    g = flip_noise(g, rng, prob=0.01 if not hard else 0.02)
+    return to_row_major(g)
+
+
 def synthesize_unknown_letter(label: str, rng: random.Random, *, hard: bool) -> List[int]:
     g = stroke_letter(label)
 
@@ -338,9 +422,20 @@ def add_unknown_rows(
     rng.shuffle(letter_pool)
     for i in range(unknown_count):
         label = letter_pool[i % len(letter_pool)]
-        # Most unknowns should look like real letters to teach rejection on hard negatives.
-        use_letter_like = rng.random() < 0.85
-        pixels = synthesize_unknown_letter(label, rng, hard=hard) if use_letter_like else synthesize_unknown(rng, hard=hard)
+        # Mix several unknown styles so the net learns [0,0,0] for blanks/noise/garbage too.
+        p = rng.random()
+        if p < 0.45:
+            pixels = synthesize_unknown_letter(label, rng, hard=hard)
+        elif p < 0.65:
+            pixels = synthesize_obvious_confuser_unknown(rng, hard=hard)
+        elif p < 0.78:
+            pixels = synthesize_unknown(rng, hard=hard)
+        elif p < 0.89:
+            pixels = synthesize_line_unknown(rng, hard=hard)
+        elif p < 0.97:
+            pixels = synthesize_noise_unknown(rng, hard=hard)
+        else:
+            pixels = synthesize_empty_unknown(rng, hard=hard)
         rows.append((pixels, label))
 
 
