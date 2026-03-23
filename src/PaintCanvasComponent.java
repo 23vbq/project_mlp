@@ -61,24 +61,43 @@ public class PaintCanvasComponent extends JComponent {
 	protected void paintComponent(Graphics g) {
 		super.paintComponent(g);
 
-		int cellW = getCeilWidth();
-		int cellH = getCeilHeight();
+		int cellSize = getCellSize();
+		if (cellSize <= 0) {
+			return;
+		}
+		int gridSize = cellSize * ceilsAmount;
+		int offsetX = (getWidth() - gridSize) / 2;
+		int offsetY = (getHeight() - gridSize) / 2;
 
 		for (int row = 0; row < ceilsAmount; row++) {
 			for (int col = 0; col < ceilsAmount; col++) {
 				g.setColor(Color.GRAY);
-				g.fillRect(col * cellW, row * cellH, cellW, cellH);
+				g.fillRect(offsetX + col * cellSize, offsetY + row * cellSize, cellSize, cellSize);
 				g.setColor(canvas[row][col] ? Color.BLACK : Color.WHITE);
-				g.fillRect(col * cellW + 1, row * cellH + 1, cellW - 2, cellH - 2);
+				if (cellSize > 2) {
+					g.fillRect(offsetX + col * cellSize + 1, offsetY + row * cellSize + 1, cellSize - 2, cellSize - 2);
+				}
 			}
 		}
 	}
 	
 	private void paintEventHandler(MouseEvent e, boolean force) {
-		int cellW = getCeilWidth();
-		int cellH = getCeilHeight();
-		int col = e.getX() / cellW;
-		int row = e.getY() / cellH;
+		int cellSize = getCellSize();
+		if (cellSize <= 0) {
+			return;
+		}
+		int gridSize = cellSize * ceilsAmount;
+		int offsetX = (getWidth() - gridSize) / 2;
+		int offsetY = (getHeight() - gridSize) / 2;
+
+		int localX = e.getX() - offsetX;
+		int localY = e.getY() - offsetY;
+		if (localX < 0 || localY < 0 || localX >= gridSize || localY >= gridSize) {
+			return;
+		}
+
+		int col = localX / cellSize;
+		int row = localY / cellSize;
 
 		if (col < 0 || col > ceilsAmount - 1 || row < 0 || row > ceilsAmount - 1) {
 			return;
@@ -92,11 +111,7 @@ public class PaintCanvasComponent extends JComponent {
 		repaint();
 	}
 	
-	private int getCeilWidth() {
-		return getWidth() / ceilsAmount;
-	}
-	
-	private int getCeilHeight() {
-		return getHeight() / ceilsAmount;
+	private int getCellSize() {
+		return Math.min(getWidth(), getHeight()) / ceilsAmount;
 	}
 }
