@@ -4,8 +4,8 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalTime;
@@ -286,7 +286,7 @@ public class MainAppPanel extends JPanel {
 	}
 
 	private void onTest() {
-		readAndShowDataset("dane_testowe.csv", "Czytaj");
+		readAndShowDataset("dane_testowe.csv", "Testuj");
 	}
 
 	private void onResetNetwork() {
@@ -342,7 +342,7 @@ public class MainAppPanel extends JPanel {
 					buildDatasetPreview(fileName, dataset, 4),
 					actionName + " - podglad danych",
 					JOptionPane.INFORMATION_MESSAGE);
-		} catch (FileNotFoundException ex) {
+		} catch (NoSuchFileException ex) {
 			log("[" + actionName + "] Nie znaleziono pliku: " + fileName);
 			JOptionPane.showMessageDialog(this,
 					"Nie znaleziono pliku " + fileName + "\nKatalog roboczy: " + Paths.get("").toAbsolutePath(),

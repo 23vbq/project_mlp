@@ -111,8 +111,7 @@ public final class CsvDatasetIO {
 		if (pixels == null || pixels.length != 64) {
 			throw new IllegalArgumentException("Oczekiwano 64 pikseli.");
 		}
-		double[] oneHot = toOneHot(Character.toUpperCase(label));
-		if (oneHot == null) {
+		if (toOneHot(Character.toUpperCase(label)) == null) {
 			throw new IllegalArgumentException("Etykieta musi byc E/F/Z.");
 		}
 
