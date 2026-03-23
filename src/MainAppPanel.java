@@ -135,7 +135,7 @@ public class MainAppPanel extends JPanel {
 
 		add(mainColumns, BorderLayout.CENTER);
 
-		log("UI załadowane. Handlery w trybie stub (tylko log).");
+		log("UI zaladowane. Aplikacja gotowa do pracy.");
 	}
 
 	private JPanel buildLeftTopPanel() {
