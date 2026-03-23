@@ -3,7 +3,11 @@
 Generate synthetic 8x8 CSV datasets for letters E, F, Z.
 
 Output format per row:
-  64 binary values in row-major order + label (E/F/Z)
+    64 binary values in row-major order + label
+
+Primary classes are E/F/Z.
+A configurable portion of samples use random other labels (A-Z excluding E/F/Z),
+meant to represent unknown letters.
 
 Default outputs:
   - dane_uczace.csv
@@ -103,6 +107,19 @@ def to_row_major(grid: Grid) -> List[int]:
     return [grid[r][c] for r in range(8) for c in range(8)]
 
 
+def draw_line(grid: Grid, r0: int, c0: int, r1: int, c1: int) -> None:
+    steps = max(abs(r1 - r0), abs(c1 - c0))
+    if steps == 0:
+        grid[r0][c0] = 1
+        return
+    for i in range(steps + 1):
+        t = i / steps
+        rr = int(round(r0 + (r1 - r0) * t))
+        cc = int(round(c0 + (c1 - c0) * t))
+        if 0 <= rr < 8 and 0 <= cc < 8:
+            grid[rr][cc] = 1
+
+
 def synthesize(label: str, rng: random.Random, *, hard: bool) -> List[int]:
     g = base_pattern(label)
 
@@ -123,6 +140,24 @@ def synthesize(label: str, rng: random.Random, *, hard: bool) -> List[int]:
     return to_row_major(g)
 
 
+def synthesize_unknown(rng: random.Random, *, hard: bool) -> List[int]:
+    g = blank_grid()
+
+    stroke_count = rng.randint(3, 5 if hard else 4)
+    for _ in range(stroke_count):
+        r0, c0 = rng.randint(0, 7), rng.randint(0, 7)
+        r1, c1 = rng.randint(0, 7), rng.randint(0, 7)
+        draw_line(g, r0, c0, r1, c1)
+
+    if rng.random() < 0.5:
+        g = thicken(g, rng, prob=0.20 if not hard else 0.28)
+    if rng.random() < 0.25:
+        g = dropout(g, rng, prob=0.10 if not hard else 0.16)
+    g = flip_noise(g, rng, prob=0.02 if not hard else 0.04)
+
+    return to_row_major(g)
+
+
 def generate_rows(
     labels: Sequence[str],
     per_class: int,
@@ -136,6 +171,25 @@ def generate_rows(
             rows.append((synthesize(label, rng, hard=hard), label))
     rng.shuffle(rows)
     return rows
+
+
+def add_unknown_rows(
+    rows: List[Tuple[List[int], str]],
+    known_count: int,
+    unknown_ratio: float,
+    rng: random.Random,
+    *,
+    hard: bool,
+) -> None:
+    if unknown_ratio <= 0.0:
+        return
+
+    unknown_count = int(round((known_count * unknown_ratio) / max(1e-9, 1.0 - unknown_ratio)))
+    letters = [ch for ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if ch not in {"E", "F", "Z"}]
+
+    for _ in range(unknown_count):
+        label = rng.choice(letters)
+        rows.append((synthesize_unknown(rng, hard=hard), label))
 
 
 def write_csv(path: Path, rows: Iterable[Tuple[List[int], str]]) -> None:
@@ -152,6 +206,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--test-out", default="dane_testowe.csv", help="Output path for testing CSV.")
     parser.add_argument("--train-per-class", type=int, default=300, help="Samples per class for training set.")
     parser.add_argument("--test-per-class", type=int, default=90, help="Samples per class for test set.")
+    parser.add_argument(
+        "--unknown-ratio",
+        type=float,
+        default=0.25,
+        help="Fraction of unknown-letter samples among all rows (default: 0.25).",
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
     parser.add_argument(
         "--hard-test",
@@ -163,11 +223,31 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if not (0.0 <= args.unknown_ratio < 1.0):
+        raise SystemExit("--unknown-ratio must be in range [0.0, 1.0).")
+
     rng = random.Random(args.seed)
 
     labels = ("E", "F", "Z")
     train_rows = generate_rows(labels, args.train_per_class, rng, hard=False)
     test_rows = generate_rows(labels, args.test_per_class, rng, hard=args.hard_test)
+
+    add_unknown_rows(
+        train_rows,
+        known_count=len(train_rows),
+        unknown_ratio=args.unknown_ratio,
+        rng=rng,
+        hard=False,
+    )
+    add_unknown_rows(
+        test_rows,
+        known_count=len(test_rows),
+        unknown_ratio=args.unknown_ratio,
+        rng=rng,
+        hard=args.hard_test,
+    )
+    rng.shuffle(train_rows)
+    rng.shuffle(test_rows)
 
     train_path = Path(args.train_out)
     test_path = Path(args.test_out)
@@ -175,8 +255,8 @@ def main() -> None:
     write_csv(train_path, train_rows)
     write_csv(test_path, test_rows)
 
-    print(f"Generated: {train_path} ({len(train_rows)} rows)")
-    print(f"Generated: {test_path} ({len(test_rows)} rows)")
+    print(f"Generated: {train_path} ({len(train_rows)} rows, unknown ratio target={args.unknown_ratio:.2f})")
+    print(f"Generated: {test_path} ({len(test_rows)} rows, unknown ratio target={args.unknown_ratio:.2f})")
 
 
 if __name__ == "__main__":

@@ -321,7 +321,7 @@ public class MainAppPanel extends JPanel {
 			@Override
 			protected TrainingSummary doInBackground() throws Exception {
 				Path path = Paths.get("dane_uczace.csv");
-				CsvDatasetIO.Dataset dataset = CsvDatasetIO.readDataset(path, this::publish);
+				CsvDatasetIO.Dataset dataset = CsvDatasetIO.readTrainingDataset(path, this::publish);
 				if (dataset.size() == 0) {
 					throw new IllegalStateException("Nie znaleziono poprawnych rekordow w pliku: dane_uczace.csv");
 				}
@@ -411,7 +411,7 @@ public class MainAppPanel extends JPanel {
 			@Override
 			protected TestSummary doInBackground() throws Exception {
 				Path path = Paths.get("dane_testowe.csv");
-				CsvDatasetIO.Dataset dataset = CsvDatasetIO.readDataset(path, this::publish);
+				CsvDatasetIO.Dataset dataset = CsvDatasetIO.readTestDataset(path, this::publish);
 				if (dataset.size() == 0) {
 					throw new IllegalStateException("Nie znaleziono poprawnych rekordow w pliku: dane_testowe.csv");
 				}
@@ -421,22 +421,33 @@ public class MainAppPanel extends JPanel {
 				int[] totalByClass = new int[3];
 				int[] correctByClass = new int[3];
 				int totalCorrect = 0;
+				int unknownTotal = 0;
+				int unknownRejected = 0;
+				int unknownGuessed = 0;
 
 				for (int i = 0; i < dataset.size(); i++) {
 					int expectedIndex = labelToIndex(dataset.labels[i]);
+					double[] output = mlpNetwork.oblicz_wyjscie(dataset.inputs[i]);
+					int predictedIndex = predictIndex(output);
+
 					if (expectedIndex < 0) {
+						unknownTotal++;
+						if (predictedIndex < 0) {
+							unknownRejected++;
+						} else {
+							unknownGuessed++;
+						}
 						continue;
 					}
 					totalByClass[expectedIndex]++;
-					double[] output = mlpNetwork.oblicz_wyjscie(dataset.inputs[i]);
-					int predictedIndex = predictIndex(output);
 					if (predictedIndex == expectedIndex) {
 						correctByClass[expectedIndex]++;
 						totalCorrect++;
 					}
 				}
 
-				return new TestSummary(dataset.size(), dataset.skippedRows, totalByClass, correctByClass, totalCorrect);
+				return new TestSummary(dataset.size(), dataset.skippedRows, totalByClass, correctByClass, totalCorrect,
+						unknownTotal, unknownRejected, unknownGuessed);
 			}
 
 			@Override
@@ -451,23 +462,32 @@ public class MainAppPanel extends JPanel {
 				setTrainingControlsEnabled(true);
 				try {
 					TestSummary summary = get();
+					int knownTotal = summary.totalByClass[0] + summary.totalByClass[1] + summary.totalByClass[2];
 					double eAcc = percentage(summary.correctByClass[0], summary.totalByClass[0]);
 					double fAcc = percentage(summary.correctByClass[1], summary.totalByClass[1]);
 					double zAcc = percentage(summary.correctByClass[2], summary.totalByClass[2]);
-					double totalAcc = percentage(summary.totalCorrect, summary.sampleCount);
+					double totalAcc = percentage(summary.totalCorrect, knownTotal);
+					double unknownRejectAcc = percentage(summary.unknownRejected, summary.unknownTotal);
 
 					log("[Testuj] E=" + String.format("%.2f", eAcc) + "%, F=" + String.format("%.2f", fAcc)
 							+ "%, Z=" + String.format("%.2f", zAcc) + "%, TOTAL="
-							+ String.format("%.2f", totalAcc) + "%");
+							+ String.format("%.2f", totalAcc) + "%, UNKNOWN_REJECT="
+							+ String.format("%.2f", unknownRejectAcc) + "% (" + summary.unknownRejected + "/"
+							+ summary.unknownTotal + "), UNKNOWN_GUESSED=" + summary.unknownGuessed);
 
 					JOptionPane.showMessageDialog(MainAppPanel.this,
 							"Test zakonczony.\n"
 									+ "Probki: " + summary.sampleCount + "\n"
 									+ "Odrzucone wiersze: " + summary.skippedRows + "\n"
+									+ "Znane probki E/F/Z: " + knownTotal + "\n"
 									+ "E: " + String.format("%.2f", eAcc) + "%\n"
 									+ "F: " + String.format("%.2f", fAcc) + "%\n"
 									+ "Z: " + String.format("%.2f", zAcc) + "%\n"
-									+ "TOTAL: " + String.format("%.2f", totalAcc) + "%",
+									+ "TOTAL(E/F/Z): " + String.format("%.2f", totalAcc) + "%\n"
+									+ "Inne literki: " + summary.unknownTotal + "\n"
+									+ "Inne odrzucone poprawnie: " + summary.unknownRejected + " ("
+									+ String.format("%.2f", unknownRejectAcc) + "%)\n"
+									+ "Inne blednie zgadniete: " + summary.unknownGuessed,
 							"Wynik testowania",
 							JOptionPane.INFORMATION_MESSAGE);
 				} catch (Exception ex) {
@@ -699,13 +719,20 @@ public class MainAppPanel extends JPanel {
 		final int[] totalByClass;
 		final int[] correctByClass;
 		final int totalCorrect;
+		final int unknownTotal;
+		final int unknownRejected;
+		final int unknownGuessed;
 
-		TestSummary(int sampleCount, int skippedRows, int[] totalByClass, int[] correctByClass, int totalCorrect) {
+		TestSummary(int sampleCount, int skippedRows, int[] totalByClass, int[] correctByClass, int totalCorrect,
+				int unknownTotal, int unknownRejected, int unknownGuessed) {
 			this.sampleCount = sampleCount;
 			this.skippedRows = skippedRows;
 			this.totalByClass = totalByClass;
 			this.correctByClass = correctByClass;
 			this.totalCorrect = totalCorrect;
+			this.unknownTotal = unknownTotal;
+			this.unknownRejected = unknownRejected;
+			this.unknownGuessed = unknownGuessed;
 		}
 	}
 }

@@ -32,6 +32,19 @@ public final class CsvDatasetIO {
 	}
 
 	public static Dataset readDataset(Path csvPath, Consumer<String> log) throws IOException {
+		return readDatasetInternal(csvPath, log, true);
+	}
+
+	public static Dataset readTrainingDataset(Path csvPath, Consumer<String> log) throws IOException {
+		return readDatasetInternal(csvPath, log, true);
+	}
+
+	public static Dataset readTestDataset(Path csvPath, Consumer<String> log) throws IOException {
+		return readDatasetInternal(csvPath, log, true);
+	}
+
+	private static Dataset readDatasetInternal(Path csvPath, Consumer<String> log, boolean allowUnknownLabels)
+			throws IOException {
 		List<double[]> inputs = new ArrayList<>();
 		List<double[]> expected = new ArrayList<>();
 		List<Character> labels = new ArrayList<>();
@@ -87,9 +100,13 @@ public final class CsvDatasetIO {
 				char label = Character.toUpperCase(rawLabel.charAt(0));
 				double[] out = toOneHot(label);
 				if (out == null) {
-					skipped++;
-					log.accept("[CSV] Odrzucono wiersz " + lineNo + ": etykieta musi byc E/F/Z");
-					continue;
+					if (allowUnknownLabels) {
+						out = new double[] { 0.0, 0.0, 0.0 };
+					} else {
+						skipped++;
+						log.accept("[CSV] Odrzucono wiersz " + lineNo + ": etykieta musi byc E/F/Z");
+						continue;
+					}
 				}
 
 				inputs.add(in);
