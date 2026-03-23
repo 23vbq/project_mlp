@@ -6,8 +6,8 @@ Output format per row:
     64 binary values in row-major order + label
 
 Primary classes are E/F/Z.
-A configurable portion of samples use random other labels (A-Z excluding E/F/Z),
-meant to represent unknown letters.
+A configurable portion of samples is added for all remaining letters
+(A-Z excluding E/F/Z), distributed evenly, to represent unknown letters.
 
 Default outputs:
   - dane_uczace.csv
@@ -176,19 +176,25 @@ def generate_rows(
 def add_unknown_rows(
     rows: List[Tuple[List[int], str]],
     known_count: int,
-    unknown_ratio: float,
+    all_letters_ratio: float,
     rng: random.Random,
     *,
     hard: bool,
 ) -> None:
-    if unknown_ratio <= 0.0:
+    if all_letters_ratio <= 0.0:
         return
 
-    unknown_count = int(round((known_count * unknown_ratio) / max(1e-9, 1.0 - unknown_ratio)))
+    unknown_count = int(round((known_count * all_letters_ratio) / max(1e-9, 1.0 - all_letters_ratio)))
     letters = [ch for ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if ch not in {"E", "F", "Z"}]
 
-    for _ in range(unknown_count):
-        label = rng.choice(letters)
+    if unknown_count <= 0:
+        return
+
+    # Ensure every non-E/F/Z letter appears in similar proportion.
+    letter_pool = letters[:]
+    rng.shuffle(letter_pool)
+    for i in range(unknown_count):
+        label = letter_pool[i % len(letter_pool)]
         rows.append((synthesize_unknown(rng, hard=hard), label))
 
 
@@ -207,10 +213,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-per-class", type=int, default=300, help="Samples per class for training set.")
     parser.add_argument("--test-per-class", type=int, default=90, help="Samples per class for test set.")
     parser.add_argument(
-        "--unknown-ratio",
+        "--all-letters-ratio",
         type=float,
         default=0.25,
-        help="Fraction of unknown-letter samples among all rows (default: 0.25).",
+        help="Fraction of additional A-Z(excluding E/F/Z) samples among all rows (default: 0.25).",
+    )
+    parser.add_argument(
+        "--unknown-ratio",
+        type=float,
+        default=None,
+        help="Deprecated alias for --all-letters-ratio.",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
     parser.add_argument(
@@ -223,8 +235,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    if not (0.0 <= args.unknown_ratio < 1.0):
-        raise SystemExit("--unknown-ratio must be in range [0.0, 1.0).")
+    all_letters_ratio = args.all_letters_ratio if args.unknown_ratio is None else args.unknown_ratio
+    if not (0.0 <= all_letters_ratio < 1.0):
+        raise SystemExit("--all-letters-ratio (or --unknown-ratio) must be in range [0.0, 1.0).")
 
     rng = random.Random(args.seed)
 
@@ -235,14 +248,14 @@ def main() -> None:
     add_unknown_rows(
         train_rows,
         known_count=len(train_rows),
-        unknown_ratio=args.unknown_ratio,
+        all_letters_ratio=all_letters_ratio,
         rng=rng,
         hard=False,
     )
     add_unknown_rows(
         test_rows,
         known_count=len(test_rows),
-        unknown_ratio=args.unknown_ratio,
+        all_letters_ratio=all_letters_ratio,
         rng=rng,
         hard=args.hard_test,
     )
@@ -255,8 +268,8 @@ def main() -> None:
     write_csv(train_path, train_rows)
     write_csv(test_path, test_rows)
 
-    print(f"Generated: {train_path} ({len(train_rows)} rows, unknown ratio target={args.unknown_ratio:.2f})")
-    print(f"Generated: {test_path} ({len(test_rows)} rows, unknown ratio target={args.unknown_ratio:.2f})")
+    print(f"Generated: {train_path} ({len(train_rows)} rows, all-letters ratio target={all_letters_ratio:.2f})")
+    print(f"Generated: {test_path} ({len(test_rows)} rows, all-letters ratio target={all_letters_ratio:.2f})")
 
 
 if __name__ == "__main__":
