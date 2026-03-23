@@ -4,6 +4,10 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Dictionary;
@@ -278,11 +282,11 @@ public class MainAppPanel extends JPanel {
 	}
 
 	private void onTrain() {
-		log("[Ucz] stub — epoki=" + getEpochs() + ", lr=" + getLearningRate());
+		readAndShowDataset("dane_uczace.csv", "Ucz");
 	}
 
 	private void onTest() {
-		log("[Testuj] stub");
+		readAndShowDataset("dane_testowe.csv", "Czytaj");
 	}
 
 	private void onResetNetwork() {
@@ -295,6 +299,90 @@ public class MainAppPanel extends JPanel {
 
 	private void onAppendTraining() {
 		char label = radioE.isSelected() ? 'E' : (radioF.isSelected() ? 'F' : 'Z');
-		log("[Dopisz] stub — wybrana etykieta: " + label);
+		double[] pixels = paintCanvas.getContent();
+		Path path = Paths.get("dane_uczace.csv");
+		try {
+			CsvDatasetIO.appendSample(path, pixels, label);
+			log("[Dopisz] Dodano rekord do dane_uczace.csv z etykieta " + label + ".");
+			JOptionPane.showMessageDialog(this,
+					"Dodano rekord do dane_uczace.csv\nEtykieta: " + label,
+					"Dopisano",
+					JOptionPane.INFORMATION_MESSAGE);
+		} catch (IllegalArgumentException ex) {
+			log("[Dopisz] Blad danych: " + ex.getMessage());
+			JOptionPane.showMessageDialog(this,
+					ex.getMessage(),
+					"Blad danych",
+					JOptionPane.WARNING_MESSAGE);
+		} catch (IOException ex) {
+			log("[Dopisz] Blad zapisu: " + ex.getMessage());
+			JOptionPane.showMessageDialog(this,
+					"Nie udalo sie dopisac do dane_uczace.csv\n" + ex.getMessage(),
+					"Blad zapisu",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private void readAndShowDataset(String fileName, String actionName) {
+		Path path = Paths.get(fileName);
+		try {
+			CsvDatasetIO.Dataset dataset = CsvDatasetIO.readDataset(path, this::log);
+			if (dataset.size() == 0) {
+				log("[" + actionName + "] Brak poprawnych rekordow w pliku " + fileName + ".");
+				JOptionPane.showMessageDialog(this,
+						"Nie znaleziono poprawnych rekordow w pliku: " + fileName,
+						"Brak danych",
+						JOptionPane.WARNING_MESSAGE);
+				return;
+			}
+
+			log("[" + actionName + "] Wczytano " + dataset.size() + " rekordow (odrzucone: " + dataset.skippedRows
+					+ ") z pliku " + fileName + ".");
+			JOptionPane.showMessageDialog(this,
+					buildDatasetPreview(fileName, dataset, 4),
+					actionName + " - podglad danych",
+					JOptionPane.INFORMATION_MESSAGE);
+		} catch (FileNotFoundException ex) {
+			log("[" + actionName + "] Nie znaleziono pliku: " + fileName);
+			JOptionPane.showMessageDialog(this,
+					"Nie znaleziono pliku " + fileName + "\nKatalog roboczy: " + Paths.get("").toAbsolutePath(),
+					"Blad pliku",
+					JOptionPane.ERROR_MESSAGE);
+		} catch (IOException ex) {
+			log("[" + actionName + "] Blad IO: " + ex.getMessage());
+			JOptionPane.showMessageDialog(this,
+					"Nie udalo sie odczytac pliku " + fileName + "\n" + ex.getMessage(),
+					"Blad IO",
+					JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private static String buildDatasetPreview(String fileName, CsvDatasetIO.Dataset dataset, int maxRows) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("Plik: ").append(fileName).append('\n');
+		sb.append("Rekordy poprawne: ").append(dataset.size()).append('\n');
+		sb.append("Rekordy odrzucone: ").append(dataset.skippedRows).append("\n\n");
+
+		int shown = Math.min(maxRows, dataset.size());
+		for (int i = 0; i < shown; i++) {
+			double[] in = dataset.inputs[i];
+			double[] out = dataset.expected[i];
+			sb.append("#").append(i + 1).append(" label=").append(dataset.labels[i]);
+			sb.append(" in[0..7]=[");
+			for (int j = 0; j < 8; j++) {
+				if (j > 0) {
+					sb.append(',');
+				}
+				sb.append((int) in[j]);
+			}
+			sb.append("] oneHot=[");
+			sb.append((int) out[0]).append(',').append((int) out[1]).append(',').append((int) out[2]).append(']');
+			sb.append('\n');
+		}
+
+		if (dataset.size() > shown) {
+			sb.append("... (+").append(dataset.size() - shown).append(" kolejnych)");
+		}
+		return sb.toString();
 	}
 }
