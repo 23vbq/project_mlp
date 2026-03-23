@@ -1,7 +1,10 @@
 
+import java.util.Arrays;
+
 public class Warstwa {
 	Neuron [] neurony;
 	int liczba_neuronow;
+	double[] lastInputs;
 	
 	public Warstwa(){
 		neurony=null;
@@ -14,6 +17,7 @@ public class Warstwa {
 			neurony[i]=new Neuron(liczba_wejsc);
 	}
 	double [] oblicz_wyjscie(double [] wejscia){
+		lastInputs=Arrays.copyOf(wejscia,wejscia.length);
 		double [] wyjscie=new double[liczba_neuronow];
 		for(int i=0;i<liczba_neuronow;i++)
 			wyjscie[i]=neurony[i].oblicz_wyjscie(wejscia);

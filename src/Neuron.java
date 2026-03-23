@@ -4,6 +4,8 @@ import java.util.Random;
 public class Neuron {
 	double [] wagi;
 	int liczba_wejsc;
+	double lastOutput;
+	double deltaError;
 
 	public Neuron(){
 		liczba_wejsc=0;
@@ -28,6 +30,7 @@ public class Neuron {
 		double wynik=1.0/(1.0+Math.exp(-fi));// funkcja aktywacji sigma -unip
 		//double wynik=(fi>0.0)?1.0:0.0;//skok jednostkowy
 		//double wynik=fi; //f.a. liniowa 
+		lastOutput=wynik;
 		return wynik;
 	}
 }

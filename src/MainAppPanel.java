@@ -12,6 +12,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Dictionary;
 import java.util.Enumeration;
+import java.util.List;
 
 import javax.swing.*;
 import javax.swing.event.*;
@@ -32,10 +33,17 @@ public class MainAppPanel extends JPanel {
 	private final JRadioButton radioE;
 	private final JRadioButton radioF;
 	private final JRadioButton radioZ;
+	private JButton guessBtn;
+	private JButton clearBtn;
+	private JButton trainBtn;
+	private JButton testBtn;
+	private JButton resetBtn;
+	private JButton appendBtn;
 
 	private final JPanel trainingChartPlaceholder;
 	private final JPanel testChartPlaceholder;
 	private final NetworkOutputsPanel networkOutputsPanel;
+	private boolean trainingInProgress;
 
 	public MainAppPanel(Siec network) {
 		super(new BorderLayout(8, 8));
@@ -142,9 +150,9 @@ public class MainAppPanel extends JPanel {
 		east.setLayout(new BoxLayout(east, BoxLayout.Y_AXIS));
 		east.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
 
-		JButton guessBtn = new JButton("Zgadnij");
+		guessBtn = new JButton("Zgadnij");
 		guessBtn.addActionListener(e -> onGuess());
-		JButton clearBtn = new JButton("Wyczyść");
+		clearBtn = new JButton("Wyczyść");
 		clearBtn.addActionListener(e -> onClear());
 
 		east.add(guessBtn);
@@ -190,11 +198,11 @@ public class MainAppPanel extends JPanel {
 		lrRow.add(lrSouth, BorderLayout.CENTER);
 
 		JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-		JButton trainBtn = new JButton("Ucz");
+		trainBtn = new JButton("Ucz");
 		trainBtn.addActionListener(e -> onTrain());
-		JButton testBtn = new JButton("Testuj");
+		testBtn = new JButton("Testuj");
 		testBtn.addActionListener(e -> onTest());
-		JButton resetBtn = new JButton("Reset sieć");
+		resetBtn = new JButton("Reset sieć");
 		resetBtn.addActionListener(e -> onResetNetwork());
 		actions.add(trainBtn);
 		actions.add(testBtn);
@@ -210,7 +218,7 @@ public class MainAppPanel extends JPanel {
 		letters.add(radioZ);
 
 		JPanel appendRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-		JButton appendBtn = new JButton("Dopisz do ciągu uczącego");
+		appendBtn = new JButton("Dopisz do ciągu uczącego");
 		appendBtn.addActionListener(e -> onAppendTraining());
 		appendRow.add(appendBtn);
 		JPanel dataGroup = new JPanel(new BorderLayout(0, 4));
@@ -267,26 +275,232 @@ public class MainAppPanel extends JPanel {
 	}
 
 	private void onGuess() {
-		log("[Zgadnij] stub — sieć: " + (mlpNetwork != null ? "ok" : "null"));
-		// Tymczasowy podgląd UI wyjść (bez prawdziwej inferencji)
-		networkOutputsPanel.setReadout(0.62, 0.21, 0.19,
-				NetworkOutputsPanel.DotMode.WINNER,
-				NetworkOutputsPanel.DotMode.OTHER,
-				NetworkOutputsPanel.DotMode.OTHER);
+		double[] input = paintCanvas.getContent();
+		double[] output = mlpNetwork.oblicz_wyjscie(input);
+		int predictedIndex = predictIndex(output);
+
+		if (predictedIndex < 0) {
+			resultLabel.setText("Wynik: Nie rozpoznano");
+			networkOutputsPanel.setReadout(output[0], output[1], output[2],
+					NetworkOutputsPanel.DotMode.ALL_UNCERTAIN,
+					NetworkOutputsPanel.DotMode.ALL_UNCERTAIN,
+					NetworkOutputsPanel.DotMode.ALL_UNCERTAIN);
+			log("[Zgadnij] [" + String.format("%.2f", output[0]) + ", " + String.format("%.2f", output[1])
+					+ ", " + String.format("%.2f", output[2]) + "] -> Nie rozpoznano");
+			return;
+		}
+
+		char predictedLetter = indexToLabel(predictedIndex);
+		resultLabel.setText("Wynik: " + predictedLetter);
+		networkOutputsPanel.setReadout(output[0], output[1], output[2],
+				predictedIndex == 0 ? NetworkOutputsPanel.DotMode.WINNER : NetworkOutputsPanel.DotMode.OTHER,
+				predictedIndex == 1 ? NetworkOutputsPanel.DotMode.WINNER : NetworkOutputsPanel.DotMode.OTHER,
+				predictedIndex == 2 ? NetworkOutputsPanel.DotMode.WINNER : NetworkOutputsPanel.DotMode.OTHER);
+		log("[Zgadnij] [" + String.format("%.2f", output[0]) + ", " + String.format("%.2f", output[1])
+				+ ", " + String.format("%.2f", output[2]) + "] -> " + predictedLetter);
 	}
 
 	private void onClear() {
 		paintCanvas.clear();
+		resultLabel.setText("Wynik: —");
 		networkOutputsPanel.setIdle();
 		log("[Wyczyść] siatka wyczyszczona.");
 	}
 
 	private void onTrain() {
-		readAndShowDataset("dane_uczace.csv", "Ucz");
+		if (trainingInProgress) {
+			return;
+		}
+
+		final int epochs = getEpochs();
+		final double learningRate = getLearningRate();
+		setTrainingControlsEnabled(false);
+		log("[Ucz] Start uczenia w tle: epoki=" + epochs + ", lr=" + learningRate);
+
+		SwingWorker<TrainingSummary, String> worker = new SwingWorker<TrainingSummary, String>() {
+			@Override
+			protected TrainingSummary doInBackground() throws Exception {
+				Path path = Paths.get("dane_uczace.csv");
+				CsvDatasetIO.Dataset dataset = CsvDatasetIO.readDataset(path, this::publish);
+				if (dataset.size() == 0) {
+					throw new IllegalStateException("Nie znaleziono poprawnych rekordow w pliku: dane_uczace.csv");
+				}
+
+				publish("[Ucz] Wczytano " + dataset.size() + " rekordow (odrzucone: " + dataset.skippedRows + ").");
+				long start = System.nanoTime();
+				double lastMse = 0.0;
+				int logEvery = Math.max(1, epochs / 10);
+
+				for (int epoch = 1; epoch <= epochs; epoch++) {
+					lastMse = mlpNetwork.trainEpoch(dataset.inputs, dataset.expected, learningRate);
+					if (epoch == 1 || epoch == epochs || epoch % logEvery == 0) {
+						publish("[Ucz] Epoka " + epoch + "/" + epochs + ", MSE=" + String.format("%.6f", lastMse));
+					}
+				}
+
+				long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
+				return new TrainingSummary(dataset.size(), dataset.skippedRows, epochs, learningRate, lastMse, elapsedMs);
+			}
+
+			@Override
+			protected void process(List<String> chunks) {
+				for (String line : chunks) {
+					log(line);
+				}
+			}
+
+			@Override
+			protected void done() {
+				setTrainingControlsEnabled(true);
+				try {
+					TrainingSummary summary = get();
+					log("[Ucz] Koniec uczenia, MSE koncowe=" + String.format("%.6f", summary.lastMse) + ", czas="
+							+ summary.elapsedMs + " ms");
+					JOptionPane.showMessageDialog(MainAppPanel.this,
+							"Uczenie zakonczone.\n"
+									+ "Probki: " + summary.sampleCount + "\n"
+									+ "Odrzucone wiersze: " + summary.skippedRows + "\n"
+									+ "Epoki: " + summary.epochs + "\n"
+									+ "Learning rate: " + String.format("%.2f", summary.learningRate) + "\n"
+									+ "MSE koncowe: " + String.format("%.6f", summary.lastMse) + "\n"
+									+ "Czas: " + summary.elapsedMs + " ms",
+							"Uczenie zakonczone",
+							JOptionPane.INFORMATION_MESSAGE);
+				} catch (Exception ex) {
+					Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+					if (cause instanceof NoSuchFileException) {
+						log("[Ucz] Nie znaleziono pliku: dane_uczace.csv");
+						JOptionPane.showMessageDialog(MainAppPanel.this,
+								"Nie znaleziono pliku dane_uczace.csv\nKatalog roboczy: " + Paths.get("").toAbsolutePath(),
+								"Blad pliku",
+								JOptionPane.ERROR_MESSAGE);
+					} else if (cause instanceof IllegalStateException) {
+						log("[Ucz] " + cause.getMessage());
+						JOptionPane.showMessageDialog(MainAppPanel.this,
+								cause.getMessage(),
+								"Brak danych",
+								JOptionPane.WARNING_MESSAGE);
+					} else if (cause instanceof IOException) {
+						log("[Ucz] Blad IO: " + cause.getMessage());
+						JOptionPane.showMessageDialog(MainAppPanel.this,
+								"Nie udalo sie odczytac pliku dane_uczace.csv\n" + cause.getMessage(),
+								"Blad IO",
+								JOptionPane.ERROR_MESSAGE);
+					} else {
+						log("[Ucz] Blad: " + cause.getMessage());
+						JOptionPane.showMessageDialog(MainAppPanel.this,
+								"Uczenie przerwane: " + cause.getMessage(),
+								"Blad",
+								JOptionPane.ERROR_MESSAGE);
+					}
+				}
+			}
+		};
+		worker.execute();
 	}
 
 	private void onTest() {
-		readAndShowDataset("dane_testowe.csv", "Testuj");
+		if (trainingInProgress) {
+			return;
+		}
+
+		setTrainingControlsEnabled(false);
+		log("[Testuj] Start testowania w tle.");
+
+		SwingWorker<TestSummary, String> worker = new SwingWorker<TestSummary, String>() {
+			@Override
+			protected TestSummary doInBackground() throws Exception {
+				Path path = Paths.get("dane_testowe.csv");
+				CsvDatasetIO.Dataset dataset = CsvDatasetIO.readDataset(path, this::publish);
+				if (dataset.size() == 0) {
+					throw new IllegalStateException("Nie znaleziono poprawnych rekordow w pliku: dane_testowe.csv");
+				}
+
+				publish("[Testuj] Wczytano " + dataset.size() + " rekordow (odrzucone: " + dataset.skippedRows + ").");
+
+				int[] totalByClass = new int[3];
+				int[] correctByClass = new int[3];
+				int totalCorrect = 0;
+
+				for (int i = 0; i < dataset.size(); i++) {
+					int expectedIndex = labelToIndex(dataset.labels[i]);
+					if (expectedIndex < 0) {
+						continue;
+					}
+					totalByClass[expectedIndex]++;
+					double[] output = mlpNetwork.oblicz_wyjscie(dataset.inputs[i]);
+					int predictedIndex = predictIndex(output);
+					if (predictedIndex == expectedIndex) {
+						correctByClass[expectedIndex]++;
+						totalCorrect++;
+					}
+				}
+
+				return new TestSummary(dataset.size(), dataset.skippedRows, totalByClass, correctByClass, totalCorrect);
+			}
+
+			@Override
+			protected void process(List<String> chunks) {
+				for (String line : chunks) {
+					log(line);
+				}
+			}
+
+			@Override
+			protected void done() {
+				setTrainingControlsEnabled(true);
+				try {
+					TestSummary summary = get();
+					double eAcc = percentage(summary.correctByClass[0], summary.totalByClass[0]);
+					double fAcc = percentage(summary.correctByClass[1], summary.totalByClass[1]);
+					double zAcc = percentage(summary.correctByClass[2], summary.totalByClass[2]);
+					double totalAcc = percentage(summary.totalCorrect, summary.sampleCount);
+
+					log("[Testuj] E=" + String.format("%.2f", eAcc) + "%, F=" + String.format("%.2f", fAcc)
+							+ "%, Z=" + String.format("%.2f", zAcc) + "%, TOTAL="
+							+ String.format("%.2f", totalAcc) + "%");
+
+					JOptionPane.showMessageDialog(MainAppPanel.this,
+							"Test zakonczony.\n"
+									+ "Probki: " + summary.sampleCount + "\n"
+									+ "Odrzucone wiersze: " + summary.skippedRows + "\n"
+									+ "E: " + String.format("%.2f", eAcc) + "%\n"
+									+ "F: " + String.format("%.2f", fAcc) + "%\n"
+									+ "Z: " + String.format("%.2f", zAcc) + "%\n"
+									+ "TOTAL: " + String.format("%.2f", totalAcc) + "%",
+							"Wynik testowania",
+							JOptionPane.INFORMATION_MESSAGE);
+				} catch (Exception ex) {
+					Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+					if (cause instanceof NoSuchFileException) {
+						log("[Testuj] Nie znaleziono pliku: dane_testowe.csv");
+						JOptionPane.showMessageDialog(MainAppPanel.this,
+								"Nie znaleziono pliku dane_testowe.csv\nKatalog roboczy: " + Paths.get("").toAbsolutePath(),
+								"Blad pliku",
+								JOptionPane.ERROR_MESSAGE);
+					} else if (cause instanceof IllegalStateException) {
+						log("[Testuj] " + cause.getMessage());
+						JOptionPane.showMessageDialog(MainAppPanel.this,
+								cause.getMessage(),
+								"Brak danych",
+								JOptionPane.WARNING_MESSAGE);
+					} else if (cause instanceof IOException) {
+						log("[Testuj] Blad IO: " + cause.getMessage());
+						JOptionPane.showMessageDialog(MainAppPanel.this,
+								"Nie udalo sie odczytac pliku dane_testowe.csv\n" + cause.getMessage(),
+								"Blad IO",
+								JOptionPane.ERROR_MESSAGE);
+					} else {
+						log("[Testuj] Blad: " + cause.getMessage());
+						JOptionPane.showMessageDialog(MainAppPanel.this,
+								"Testowanie przerwane: " + cause.getMessage(),
+								"Blad",
+								JOptionPane.ERROR_MESSAGE);
+					}
+				}
+			}
+		};
+		worker.execute();
 	}
 
 	private void onResetNetwork() {
@@ -384,5 +598,114 @@ public class MainAppPanel extends JPanel {
 			sb.append("... (+").append(dataset.size() - shown).append(" kolejnych)");
 		}
 		return sb.toString();
+	}
+
+	private static int labelToIndex(char label) {
+		switch (Character.toUpperCase(label)) {
+		case 'E':
+			return 0;
+		case 'F':
+			return 1;
+		case 'Z':
+			return 2;
+		default:
+			return -1;
+		}
+	}
+
+	private static char indexToLabel(int index) {
+		switch (index) {
+		case 0:
+			return 'E';
+		case 1:
+			return 'F';
+		case 2:
+			return 'Z';
+		default:
+			return '?';
+		}
+	}
+
+	private static int predictIndex(double[] networkOutput) {
+		if (networkOutput == null || networkOutput.length < 3) {
+			return -1;
+		}
+
+		int aboveThresholdCount = 0;
+		int thresholdIndex = -1;
+		for (int i = 0; i < 3; i++) {
+			if (networkOutput[i] > 0.5) {
+				aboveThresholdCount++;
+				thresholdIndex = i;
+			}
+		}
+
+		if (aboveThresholdCount == 0) {
+			return -1;
+		}
+		if (aboveThresholdCount == 1) {
+			return thresholdIndex;
+		}
+
+		int argmax = 0;
+		double maxVal = networkOutput[0];
+		for (int i = 1; i < 3; i++) {
+			if (networkOutput[i] > maxVal) {
+				maxVal = networkOutput[i];
+				argmax = i;
+			}
+		}
+		return argmax;
+	}
+
+	private static double percentage(int correct, int total) {
+		if (total <= 0) {
+			return 0.0;
+		}
+		return (100.0 * correct) / total;
+	}
+
+	private void setTrainingControlsEnabled(boolean enabled) {
+		trainingInProgress = !enabled;
+		trainBtn.setEnabled(enabled);
+		testBtn.setEnabled(enabled);
+		guessBtn.setEnabled(enabled);
+		appendBtn.setEnabled(enabled);
+		resetBtn.setEnabled(enabled);
+	}
+
+	private static class TrainingSummary {
+		final int sampleCount;
+		final int skippedRows;
+		final int epochs;
+		final double learningRate;
+		final double lastMse;
+		final long elapsedMs;
+
+		TrainingSummary(int sampleCount, int skippedRows, int epochs, double learningRate, double lastMse,
+				long elapsedMs) {
+			this.sampleCount = sampleCount;
+			this.skippedRows = skippedRows;
+			this.epochs = epochs;
+			this.learningRate = learningRate;
+			this.lastMse = lastMse;
+			this.elapsedMs = elapsedMs;
+		}
+	}
+
+	private static class TestSummary {
+		final int sampleCount;
+		final int skippedRows;
+		final int[] totalByClass;
+		final int[] correctByClass;
+		final int totalCorrect;
+
+		TestSummary(int sampleCount, int skippedRows, int[] totalByClass, int[] correctByClass, int totalCorrect) {
+			this.sampleCount = sampleCount;
+			this.skippedRows = skippedRows;
+			this.totalByClass = totalByClass;
+			this.correctByClass = correctByClass;
+			this.totalCorrect = totalCorrect;
+		}
 	}
 }
