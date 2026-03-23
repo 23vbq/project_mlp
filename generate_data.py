@@ -120,6 +120,132 @@ def draw_line(grid: Grid, r0: int, c0: int, r1: int, c1: int) -> None:
             grid[rr][cc] = 1
 
 
+def stroke_letter(label: str) -> Grid:
+    g = blank_grid()
+
+    def hline(r: int, c0: int, c1: int) -> None:
+        draw_line(g, r, c0, r, c1)
+
+    def vline(c: int, r0: int, r1: int) -> None:
+        draw_line(g, r0, c, r1, c)
+
+    if label == "A":
+        vline(1, 1, 7)
+        vline(6, 1, 7)
+        hline(1, 1, 6)
+        hline(4, 1, 6)
+    elif label == "B":
+        vline(1, 0, 7)
+        hline(0, 1, 5)
+        hline(3, 1, 5)
+        hline(7, 1, 5)
+        vline(6, 1, 2)
+        vline(6, 4, 6)
+    elif label == "C":
+        hline(0, 2, 6)
+        hline(7, 2, 6)
+        vline(1, 1, 6)
+    elif label == "D":
+        vline(1, 0, 7)
+        hline(0, 1, 5)
+        hline(7, 1, 5)
+        vline(6, 1, 6)
+    elif label == "G":
+        hline(0, 2, 6)
+        hline(7, 2, 6)
+        vline(1, 1, 6)
+        hline(4, 4, 6)
+        vline(6, 4, 6)
+    elif label == "H":
+        vline(1, 0, 7)
+        vline(6, 0, 7)
+        hline(4, 1, 6)
+    elif label == "I":
+        hline(0, 1, 6)
+        hline(7, 1, 6)
+        vline(3, 1, 6)
+    elif label == "J":
+        hline(0, 1, 6)
+        vline(5, 1, 6)
+        hline(7, 2, 5)
+        vline(2, 5, 6)
+    elif label == "K":
+        vline(1, 0, 7)
+        draw_line(g, 4, 2, 0, 6)
+        draw_line(g, 4, 2, 7, 6)
+    elif label == "L":
+        vline(1, 0, 7)
+        hline(7, 1, 6)
+    elif label == "M":
+        vline(1, 0, 7)
+        vline(6, 0, 7)
+        draw_line(g, 0, 1, 3, 3)
+        draw_line(g, 3, 3, 0, 6)
+    elif label == "N":
+        vline(1, 0, 7)
+        vline(6, 0, 7)
+        draw_line(g, 0, 1, 7, 6)
+    elif label == "O":
+        hline(0, 2, 5)
+        hline(7, 2, 5)
+        vline(1, 1, 6)
+        vline(6, 1, 6)
+    elif label == "P":
+        vline(1, 0, 7)
+        hline(0, 1, 6)
+        hline(3, 1, 6)
+        vline(6, 1, 3)
+    elif label == "Q":
+        hline(0, 2, 5)
+        hline(7, 2, 5)
+        vline(1, 1, 6)
+        vline(6, 1, 6)
+        draw_line(g, 5, 5, 7, 7)
+    elif label == "R":
+        vline(1, 0, 7)
+        hline(0, 1, 6)
+        hline(3, 1, 6)
+        vline(6, 1, 3)
+        draw_line(g, 3, 3, 7, 6)
+    elif label == "S":
+        hline(0, 2, 6)
+        hline(3, 2, 6)
+        hline(7, 2, 6)
+        vline(1, 1, 3)
+        vline(6, 4, 6)
+    elif label == "T":
+        hline(0, 1, 6)
+        vline(3, 1, 7)
+    elif label == "U":
+        vline(1, 0, 6)
+        vline(6, 0, 6)
+        hline(7, 2, 5)
+    elif label == "V":
+        draw_line(g, 0, 1, 7, 3)
+        draw_line(g, 0, 6, 7, 3)
+    elif label == "W":
+        vline(1, 0, 7)
+        vline(6, 0, 7)
+        draw_line(g, 7, 1, 4, 3)
+        draw_line(g, 4, 3, 7, 6)
+    elif label == "X":
+        draw_line(g, 0, 1, 7, 6)
+        draw_line(g, 0, 6, 7, 1)
+    elif label == "Y":
+        draw_line(g, 0, 1, 3, 3)
+        draw_line(g, 0, 6, 3, 3)
+        vline(3, 3, 7)
+    else:
+        # Fallback for unsupported labels: random multi-stroke shape.
+        stroke_count = 4
+        for _ in range(stroke_count):
+            r0, c0 = random.randint(0, 7), random.randint(0, 7)
+            r1, c1 = random.randint(0, 7), random.randint(0, 7)
+            draw_line(g, r0, c0, r1, c1)
+
+    return g
+
+
 def synthesize(label: str, rng: random.Random, *, hard: bool) -> List[int]:
     g = base_pattern(label)
 
@@ -154,6 +280,23 @@ def synthesize_unknown(rng: random.Random, *, hard: bool) -> List[int]:
     if rng.random() < 0.25:
         g = dropout(g, rng, prob=0.10 if not hard else 0.16)
     g = flip_noise(g, rng, prob=0.02 if not hard else 0.04)
+
+    return to_row_major(g)
+
+
+def synthesize_unknown_letter(label: str, rng: random.Random, *, hard: bool) -> List[int]:
+    g = stroke_letter(label)
+
+    max_shift = 1 if not hard else 2
+    dr = rng.randint(-max_shift, max_shift)
+    dc = rng.randint(-max_shift, max_shift)
+    g = shift_grid(g, dr, dc)
+
+    if rng.random() < (0.35 if not hard else 0.50):
+        g = thicken(g, rng, prob=0.16 if not hard else 0.24)
+    if rng.random() < (0.20 if not hard else 0.32):
+        g = dropout(g, rng, prob=0.08 if not hard else 0.14)
+    g = flip_noise(g, rng, prob=0.015 if not hard else 0.03)
 
     return to_row_major(g)
 
@@ -195,7 +338,10 @@ def add_unknown_rows(
     rng.shuffle(letter_pool)
     for i in range(unknown_count):
         label = letter_pool[i % len(letter_pool)]
-        rows.append((synthesize_unknown(rng, hard=hard), label))
+        # Most unknowns should look like real letters to teach rejection on hard negatives.
+        use_letter_like = rng.random() < 0.85
+        pixels = synthesize_unknown_letter(label, rng, hard=hard) if use_letter_like else synthesize_unknown(rng, hard=hard)
+        rows.append((pixels, label))
 
 
 def write_csv(path: Path, rows: Iterable[Tuple[List[int], str]]) -> None:

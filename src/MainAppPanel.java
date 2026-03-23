@@ -40,8 +40,8 @@ public class MainAppPanel extends JPanel {
 	private JButton resetBtn;
 	private JButton appendBtn;
 
-	private final JPanel trainingChartPlaceholder;
-	private final JPanel testChartPlaceholder;
+	private final MetricsChartPanel trainingChartPanel;
+	private final MetricsChartPanel testChartPanel;
 	private final NetworkOutputsPanel networkOutputsPanel;
 	private boolean trainingInProgress;
 
@@ -99,19 +99,12 @@ public class MainAppPanel extends JPanel {
 		networkOutputsPanel = new NetworkOutputsPanel();
 		networkOutputsPanel.setPreferredSize(new Dimension(10, 64));
 
-		trainingChartPlaceholder = new JPanel(new BorderLayout());
-		trainingChartPlaceholder.setBorder(BorderFactory.createTitledBorder("Wykres MSE (uczenie)"));
-		trainingChartPlaceholder.add(new JLabel(" ", SwingConstants.CENTER), BorderLayout.CENTER);
-		trainingChartPlaceholder.setPreferredSize(new Dimension(240, 180));
-
-		testChartPlaceholder = new JPanel(new BorderLayout());
-		testChartPlaceholder.setBorder(BorderFactory.createTitledBorder("Wykres accuracy (test)"));
-		testChartPlaceholder.add(new JLabel(" ", SwingConstants.CENTER), BorderLayout.CENTER);
-		testChartPlaceholder.setPreferredSize(new Dimension(240, 180));
+		trainingChartPanel = new MetricsChartPanel(MetricsChartPanel.ChartType.LINE, "Wykres MSE (uczenie)");
+		testChartPanel = new MetricsChartPanel(MetricsChartPanel.ChartType.BAR, "Wykres accuracy (test)");
 
 		JPanel chartsColumn = new JPanel(new GridLayout(2, 1, 0, 8));
-		chartsColumn.add(trainingChartPlaceholder);
-		chartsColumn.add(testChartPlaceholder);
+		chartsColumn.add(trainingChartPanel);
+		chartsColumn.add(testChartPanel);
 
 		JPanel rightColumn = new JPanel(new BorderLayout(0, 8));
 		rightColumn.add(logScroll, BorderLayout.NORTH);
@@ -333,6 +326,7 @@ public class MainAppPanel extends JPanel {
 
 				for (int epoch = 1; epoch <= epochs; epoch++) {
 					lastMse = mlpNetwork.trainEpoch(dataset.inputs, dataset.expected, learningRate);
+					publish("__MSE__" + lastMse);
 					if (epoch == 1 || epoch == epochs || epoch % logEvery == 0) {
 						publish("[Ucz] Epoka " + epoch + "/" + epochs + ", MSE=" + String.format("%.6f", lastMse));
 					}
@@ -345,7 +339,15 @@ public class MainAppPanel extends JPanel {
 			@Override
 			protected void process(List<String> chunks) {
 				for (String line : chunks) {
-					log(line);
+					if (line.startsWith("__MSE__")) {
+						try {
+							double mse = Double.parseDouble(line.substring("__MSE__".length()));
+							trainingChartPanel.addLinePoint(mse);
+						} catch (NumberFormatException ignored) {
+						}
+					} else {
+						log(line);
+					}
 				}
 			}
 
@@ -468,6 +470,9 @@ public class MainAppPanel extends JPanel {
 					double zAcc = percentage(summary.correctByClass[2], summary.totalByClass[2]);
 					double totalAcc = percentage(summary.totalCorrect, knownTotal);
 					double unknownRejectAcc = percentage(summary.unknownRejected, summary.unknownTotal);
+					testChartPanel.setBarData(
+							new String[] { "E", "F", "Z", "TOTAL" },
+							new double[] { eAcc, fAcc, zAcc, totalAcc });
 
 					log("[Testuj] E=" + String.format("%.2f", eAcc) + "%, F=" + String.format("%.2f", fAcc)
 							+ "%, Z=" + String.format("%.2f", zAcc) + "%, TOTAL="
@@ -528,7 +533,9 @@ public class MainAppPanel extends JPanel {
 		mlpNetwork = new Siec(64, 3, layers);
 		logArea.setText("");
 		networkOutputsPanel.setIdle();
-		log("[Reset sieć] nowa Siec(64→8→5→3), log wyczyszczony (stub wykresów bez zmian).");
+		trainingChartPanel.clearLine();
+		testChartPanel.clearBars();
+		log("[Reset sieć] nowa Siec(64→8→5→3), wyczyszczono log i wykresy.");
 	}
 
 	private void onAppendTraining() {
