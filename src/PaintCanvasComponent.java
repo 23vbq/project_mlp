@@ -9,8 +9,16 @@ import javax.swing.*;
 
 public class PaintCanvasComponent extends JComponent {
 	private static final int DRAW_RESOLUTION = 512;
-	private static final int BRUSH_RADIUS = 8;
-	private static final float BRUSH_STRENGTH = 0.24f;
+	private static final int BRUSH_RADIUS = 12;
+	private static final float BRUSH_STRENGTH = 0.36f;
+	private static final double COVERAGE_THRESHOLD = 0.08;
+	private static final double MIN_COVERAGE_RATIO = 0.012;
+	private static final double MEAN_WEIGHT = 0.65;
+	private static final double P90_WEIGHT = 0.35;
+	private static final double COVERAGE_BOOST_TARGET = 0.12;
+	private static final double BASE_COVERAGE_GAIN = 0.45;
+	private static final double SIGNAL_GAIN = 2.6;
+	private static final double SIGNAL_EXPONENT = 0.62;
 
 	private int ceilsAmount;
 	private float[][] canvas;
@@ -81,16 +89,44 @@ public class PaintCanvasComponent extends JComponent {
 				int startX = (int) Math.floor(col * tileSize);
 				int endX = (int) Math.floor((col + 1) * tileSize);
 				double sum = 0.0;
+				int coveredCount = 0;
 				int count = 0;
+				double[] tileValues = new double[Math.max(1, (endY - startY) * (endX - startX))];
+				int valuesIdx = 0;
 
 				for (int y = startY; y < endY; y++) {
 					for (int x = startX; x < endX; x++) {
-						sum += canvas[y][x];
+						double value = canvas[y][x];
+						sum += value;
+						tileValues[valuesIdx++] = value;
+						if (value >= COVERAGE_THRESHOLD) {
+							coveredCount++;
+						}
 						count++;
 					}
 				}
 
-				fields[row * ceilsAmount + col] = count == 0 ? 0.0 : sum / count;
+				if (count == 0) {
+					fields[row * ceilsAmount + col] = 0.0;
+					continue;
+				}
+
+				double mean = sum / count;
+				double coverage = (double) coveredCount / count;
+				if (coverage < MIN_COVERAGE_RATIO) {
+					fields[row * ceilsAmount + col] = 0.0;
+					continue;
+				}
+
+				java.util.Arrays.sort(tileValues, 0, valuesIdx);
+				int p90Index = Math.max(0, (int) Math.ceil(0.9 * valuesIdx) - 1);
+				double p90 = tileValues[p90Index];
+
+				double mixedValue = (MEAN_WEIGHT * mean) + (P90_WEIGHT * p90);
+				double normalizedCoverage = Math.min(1.0, coverage / COVERAGE_BOOST_TARGET);
+				double coverageGain = BASE_COVERAGE_GAIN + (1.0 - BASE_COVERAGE_GAIN) * normalizedCoverage;
+				double boostedValue = Math.max(0.0, Math.min(1.0, mixedValue * SIGNAL_GAIN * coverageGain));
+				fields[row * ceilsAmount + col] = Math.pow(boostedValue, SIGNAL_EXPONENT);
 			}
 		}
 
