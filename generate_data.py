@@ -3,7 +3,7 @@
 Generate synthetic 8x8 CSV datasets for letters E, F, Z.
 
 Output format per row:
-    64 binary values in row-major order + label
+    64 continuous values (0.0-1.0) in row-major order + label
 
 Primary classes are E/F/Z.
 A configurable portion of samples is added for all remaining letters
@@ -105,6 +105,41 @@ def flip_noise(grid: Grid, rng: random.Random, prob: float) -> Grid:
 
 def to_row_major(grid: Grid) -> List[int]:
     return [grid[r][c] for r in range(8) for c in range(8)]
+
+
+def soften_row_major(binary_pixels: List[int], rng: random.Random, *, hard: bool) -> List[float]:
+    grid = [[binary_pixels[r * 8 + c] for c in range(8)] for r in range(8)]
+    out: List[float] = []
+
+    for r in range(8):
+        for c in range(8):
+            neighborhood_sum = 0.0
+            neighborhood_count = 0
+            for rr in range(max(0, r - 1), min(8, r + 2)):
+                for cc in range(max(0, c - 1), min(8, c + 2)):
+                    neighborhood_sum += grid[rr][cc]
+                    neighborhood_count += 1
+
+            base = float(grid[r][c])
+            neighborhood_avg = neighborhood_sum / neighborhood_count
+            value = 0.72 * base + 0.28 * neighborhood_avg
+
+            if base > 0.5:
+                value = max(value, rng.uniform(0.65, 1.0 if not hard else 0.96))
+            else:
+                value = min(value, rng.uniform(0.0, 0.30 if not hard else 0.38))
+
+            jitter = rng.uniform(-0.08 if not hard else -0.12, 0.08 if not hard else 0.12)
+            value = min(1.0, max(0.0, value + jitter))
+            if value < 0.02:
+                value = 0.0
+            out.append(round(value, 4))
+
+    return out
+
+
+def to_row_major_continuous(grid: Grid, rng: random.Random, *, hard: bool) -> List[float]:
+    return soften_row_major(to_row_major(grid), rng, hard=hard)
 
 
 def draw_line(grid: Grid, r0: int, c0: int, r1: int, c1: int) -> None:
@@ -246,7 +281,7 @@ def stroke_letter(label: str) -> Grid:
     return g
 
 
-def synthesize(label: str, rng: random.Random, *, hard: bool) -> List[int]:
+def synthesize(label: str, rng: random.Random, *, hard: bool) -> List[float]:
     g = base_pattern(label)
 
     max_shift = 1 if not hard else 2
@@ -263,10 +298,10 @@ def synthesize(label: str, rng: random.Random, *, hard: bool) -> List[int]:
     # Pixel flips simulate imperfect drawing.
     g = flip_noise(g, rng, prob=0.015 if not hard else 0.03)
 
-    return to_row_major(g)
+    return to_row_major_continuous(g, rng, hard=hard)
 
 
-def synthesize_unknown(rng: random.Random, *, hard: bool) -> List[int]:
+def synthesize_unknown(rng: random.Random, *, hard: bool) -> List[float]:
     g = blank_grid()
 
     stroke_count = rng.randint(3, 5 if hard else 4)
@@ -281,18 +316,18 @@ def synthesize_unknown(rng: random.Random, *, hard: bool) -> List[int]:
         g = dropout(g, rng, prob=0.10 if not hard else 0.16)
     g = flip_noise(g, rng, prob=0.02 if not hard else 0.04)
 
-    return to_row_major(g)
+    return to_row_major_continuous(g, rng, hard=hard)
 
 
-def synthesize_empty_unknown(rng: random.Random, *, hard: bool) -> List[int]:
+def synthesize_empty_unknown(rng: random.Random, *, hard: bool) -> List[float]:
     g = blank_grid()
     # Keep most empty samples truly empty, but allow tiny accidental noise.
     if rng.random() < (0.15 if not hard else 0.25):
         g = flip_noise(g, rng, prob=0.01 if not hard else 0.02)
-    return to_row_major(g)
+    return to_row_major_continuous(g, rng, hard=hard)
 
 
-def synthesize_line_unknown(rng: random.Random, *, hard: bool) -> List[int]:
+def synthesize_line_unknown(rng: random.Random, *, hard: bool) -> List[float]:
     g = blank_grid()
     stroke_count = rng.randint(1, 2 if not hard else 3)
     for _ in range(stroke_count):
@@ -305,10 +340,10 @@ def synthesize_line_unknown(rng: random.Random, *, hard: bool) -> List[int]:
     if rng.random() < (0.12 if not hard else 0.20):
         g = dropout(g, rng, prob=0.10 if not hard else 0.16)
     g = flip_noise(g, rng, prob=0.01 if not hard else 0.02)
-    return to_row_major(g)
+    return to_row_major_continuous(g, rng, hard=hard)
 
 
-def synthesize_obvious_confuser_unknown(rng: random.Random, *, hard: bool) -> List[int]:
+def synthesize_obvious_confuser_unknown(rng: random.Random, *, hard: bool) -> List[float]:
     g = blank_grid()
 
     variant = rng.randint(0, 5)
@@ -349,10 +384,10 @@ def synthesize_obvious_confuser_unknown(rng: random.Random, *, hard: bool) -> Li
     if rng.random() < (0.16 if not hard else 0.24):
         g = dropout(g, rng, prob=0.10 if not hard else 0.16)
     g = flip_noise(g, rng, prob=0.01 if not hard else 0.02)
-    return to_row_major(g)
+    return to_row_major_continuous(g, rng, hard=hard)
 
 
-def synthesize_noise_unknown(rng: random.Random, *, hard: bool) -> List[int]:
+def synthesize_noise_unknown(rng: random.Random, *, hard: bool) -> List[float]:
     g = blank_grid()
     on_prob = 0.07 if not hard else 0.11
     for r in range(8):
@@ -365,10 +400,10 @@ def synthesize_noise_unknown(rng: random.Random, *, hard: bool) -> List[int]:
     if rng.random() < (0.20 if not hard else 0.30):
         g = dropout(g, rng, prob=0.14 if not hard else 0.22)
     g = flip_noise(g, rng, prob=0.01 if not hard else 0.02)
-    return to_row_major(g)
+    return to_row_major_continuous(g, rng, hard=hard)
 
 
-def synthesize_unknown_letter(label: str, rng: random.Random, *, hard: bool) -> List[int]:
+def synthesize_unknown_letter(label: str, rng: random.Random, *, hard: bool) -> List[float]:
     g = stroke_letter(label)
 
     max_shift = 1 if not hard else 2
@@ -382,7 +417,7 @@ def synthesize_unknown_letter(label: str, rng: random.Random, *, hard: bool) -> 
         g = dropout(g, rng, prob=0.08 if not hard else 0.14)
     g = flip_noise(g, rng, prob=0.015 if not hard else 0.03)
 
-    return to_row_major(g)
+    return to_row_major_continuous(g, rng, hard=hard)
 
 
 def generate_rows(
@@ -391,8 +426,8 @@ def generate_rows(
     rng: random.Random,
     *,
     hard: bool,
-) -> List[Tuple[List[int], str]]:
-    rows: List[Tuple[List[int], str]] = []
+) -> List[Tuple[List[float], str]]:
+    rows: List[Tuple[List[float], str]] = []
     for label in labels:
         for _ in range(per_class):
             rows.append((synthesize(label, rng, hard=hard), label))
@@ -401,7 +436,7 @@ def generate_rows(
 
 
 def add_unknown_rows(
-    rows: List[Tuple[List[int], str]],
+    rows: List[Tuple[List[float], str]],
     known_count: int,
     all_letters_ratio: float,
     rng: random.Random,
@@ -439,12 +474,13 @@ def add_unknown_rows(
         rows.append((pixels, label))
 
 
-def write_csv(path: Path, rows: Iterable[Tuple[List[int], str]]) -> None:
+def write_csv(path: Path, rows: Iterable[Tuple[List[float], str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         for pixels, label in rows:
-            w.writerow(pixels + [label])
+            formatted = [f"{value:.4f}" for value in pixels]
+            w.writerow(formatted + [label])
 
 
 def parse_args() -> argparse.Namespace:

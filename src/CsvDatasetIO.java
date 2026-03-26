@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 public final class CsvDatasetIO {
@@ -78,7 +79,7 @@ public final class CsvDatasetIO {
 						break;
 					}
 
-					if (!(value == 0.0 || value == 1.0)) {
+					if (value < 0.0 || value > 1.0) {
 						valid = false;
 						break;
 					}
@@ -87,7 +88,7 @@ public final class CsvDatasetIO {
 
 				if (!valid) {
 					skipped++;
-					log.accept("[CSV] Odrzucono wiersz " + lineNo + ": piksele musza byc 0/1");
+					log.accept("[CSV] Odrzucono wiersz " + lineNo + ": piksele musza byc w zakresie 0.0-1.0");
 					continue;
 				}
 
@@ -134,12 +135,11 @@ public final class CsvDatasetIO {
 
 		StringBuilder sb = new StringBuilder(256);
 		for (int i = 0; i < pixels.length; i++) {
-			double value = pixels[i];
-			int bit = value >= 0.5 ? 1 : 0;
+			double value = clamp01(pixels[i]);
 			if (i > 0) {
 				sb.append(',');
 			}
-			sb.append(bit);
+			sb.append(formatPixelValue(value));
 		}
 		sb.append(',').append(Character.toUpperCase(label));
 
@@ -149,6 +149,31 @@ public final class CsvDatasetIO {
 			writer.write(sb.toString());
 			writer.newLine();
 		}
+	}
+
+	private static double clamp01(double value) {
+		if (value < 0.0) {
+			return 0.0;
+		}
+		if (value > 1.0) {
+			return 1.0;
+		}
+		return value;
+	}
+
+	private static String formatPixelValue(double value) {
+		String formatted = String.format(Locale.US, "%.6f", value);
+		int trimAt = formatted.length();
+		while (trimAt > 0 && formatted.charAt(trimAt - 1) == '0') {
+			trimAt--;
+		}
+		if (trimAt > 0 && formatted.charAt(trimAt - 1) == '.') {
+			trimAt--;
+		}
+		if (trimAt == 0) {
+			return "0";
+		}
+		return formatted.substring(0, trimAt);
 	}
 
 	private static double[] toOneHot(char label) {
