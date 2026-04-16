@@ -2,7 +2,7 @@
 
 A desktop application for recognizing handwritten letters **E**, **F**, and **Z** using a from-scratch Multi-Layer Perceptron neural network. Built in Java (Swing) with a Python data generation pipeline.
 
-![screenshot](https://github.com/user-attachments/assets/b0d422bf-f21c-4f24-951b-b57452125940)
+<img width="1266" height="713" alt="image" src="https://github.com/user-attachments/assets/14e14654-1798-43a5-a389-ce6d66cf19d2" />
 
 ---
 
