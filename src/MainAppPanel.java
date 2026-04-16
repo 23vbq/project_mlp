@@ -100,7 +100,7 @@ public class MainAppPanel extends JPanel {
 		networkOutputsPanel.setPreferredSize(new Dimension(10, 64));
 
 		trainingChartPanel = new MetricsChartPanel(MetricsChartPanel.ChartType.LINE, "Wykres MSE (uczenie)");
-		testChartPanel = new MetricsChartPanel(MetricsChartPanel.ChartType.LINE, "Wykres accuracy (test)");
+		testChartPanel = new MetricsChartPanel(MetricsChartPanel.ChartType.LINE, "Wykres accuracy [%]");
 
 		JPanel chartsColumn = new JPanel(new GridLayout(2, 1, 0, 8));
 		chartsColumn.add(trainingChartPanel);
@@ -308,6 +308,7 @@ public class MainAppPanel extends JPanel {
 		final int epochs = getEpochs();
 		final double learningRate = getLearningRate();
 		setTrainingControlsEnabled(false);
+		testChartPanel.clearLine();
 		log("[Ucz] Start uczenia w tle: epoki=" + epochs + ", lr=" + learningRate);
 
 		SwingWorker<TrainingSummary, String> worker = new SwingWorker<TrainingSummary, String>() {
@@ -320,6 +321,12 @@ public class MainAppPanel extends JPanel {
 				}
 
 				publish("[Ucz] Wczytano " + dataset.size() + " rekordow (odrzucone: " + dataset.skippedRows + ").");
+
+				CsvDatasetIO.Dataset testDataset = null;
+				try {
+					testDataset = CsvDatasetIO.readTestDataset(Paths.get("dane_testowe.csv"), msg -> {});
+				} catch (Exception ignored) {}
+
 				long start = System.nanoTime();
 				double lastMse = 0.0;
 				int logEvery = Math.max(1, epochs / 10);
@@ -329,6 +336,17 @@ public class MainAppPanel extends JPanel {
 					publish("__MSE__" + lastMse);
 					if (epoch == 1 || epoch == epochs || epoch % logEvery == 0) {
 						publish("[Ucz] Epoka " + epoch + "/" + epochs + ", MSE=" + String.format("%.6f", lastMse));
+					}
+					if (testDataset != null && testDataset.size() > 0) {
+						int correct = 0, total = 0;
+						for (int i = 0; i < testDataset.size(); i++) {
+							int expectedIndex = labelToIndex(testDataset.labels[i]);
+							if (expectedIndex < 0) continue;
+							total++;
+							double[] out = mlpNetwork.oblicz_wyjscie(testDataset.inputs[i]);
+							if (predictIndex(out) == expectedIndex) correct++;
+						}
+						publish("__TRAIN_ACC__" + percentage(correct, total));
 					}
 				}
 
@@ -343,6 +361,12 @@ public class MainAppPanel extends JPanel {
 						try {
 							double mse = Double.parseDouble(line.substring("__MSE__".length()));
 							trainingChartPanel.addLinePoint(mse);
+						} catch (NumberFormatException ignored) {
+						}
+					} else if (line.startsWith("__TRAIN_ACC__")) {
+						try {
+							double acc = Double.parseDouble(line.substring("__TRAIN_ACC__".length()));
+							testChartPanel.addLinePoint(acc);
 						} catch (NumberFormatException ignored) {
 						}
 					} else {
@@ -407,7 +431,6 @@ public class MainAppPanel extends JPanel {
 		}
 
 		setTrainingControlsEnabled(false);
-		testChartPanel.clearLine();
 		log("[Testuj] Start testowania w tle.");
 
 		SwingWorker<TestSummary, String> worker = new SwingWorker<TestSummary, String>() {
@@ -427,9 +450,6 @@ public class MainAppPanel extends JPanel {
 				int unknownTotal = 0;
 				int unknownRejected = 0;
 				int unknownGuessed = 0;
-				int knownSeen = 0;
-				int chartEvery = Math.max(1, dataset.size() / 160);
-
 				for (int i = 0; i < dataset.size(); i++) {
 					int expectedIndex = labelToIndex(dataset.labels[i]);
 					double[] output = mlpNetwork.oblicz_wyjscie(dataset.inputs[i]);
@@ -445,15 +465,9 @@ public class MainAppPanel extends JPanel {
 						continue;
 					}
 					totalByClass[expectedIndex]++;
-					knownSeen++;
 					if (predictedIndex == expectedIndex) {
 						correctByClass[expectedIndex]++;
 						totalCorrect++;
-					}
-
-					if ((knownSeen % chartEvery == 0) || i == dataset.size() - 1) {
-						double runningAcc = percentage(totalCorrect, knownSeen);
-						publish("__TEST_ACC__" + runningAcc);
 					}
 				}
 
@@ -464,15 +478,7 @@ public class MainAppPanel extends JPanel {
 			@Override
 			protected void process(List<String> chunks) {
 				for (String line : chunks) {
-					if (line.startsWith("__TEST_ACC__")) {
-						try {
-							double acc = Double.parseDouble(line.substring("__TEST_ACC__".length()));
-							testChartPanel.addLinePoint(acc);
-						} catch (NumberFormatException ignored) {
-						}
-					} else {
-						log(line);
-					}
+					log(line);
 				}
 			}
 
